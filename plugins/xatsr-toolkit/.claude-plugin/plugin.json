@@ -1,0 +1,10 @@
+{
+  "name": "xatsr-toolkit",
+  "version": "1.0.0",
+  "description": "Everyday development helpers: a change-review command, a code explainer agent, and a changelog-writing skill.",
+  "author": {
+    "name": "Xatsr"
+  },
+  "repository": "https://github.com/Xatsr/Xatsr",
+  "keywords": ["review", "changelog", "productivity"]
+}

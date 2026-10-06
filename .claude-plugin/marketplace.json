@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "xatsr",
+  "owner": {
+    "name": "Xatsr"
+  },
+  "metadata": {
+    "description": "Claude Code plugins published by Xatsr.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "xatsr-toolkit",
+      "source": "./plugins/xatsr-toolkit",
+      "description": "Everyday development helpers: a change-review command, a code explainer agent, and a changelog-writing skill.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Xatsr"
+      },
+      "category": "development",
+      "keywords": ["review", "changelog", "productivity"]
+    }
+  ]
+}

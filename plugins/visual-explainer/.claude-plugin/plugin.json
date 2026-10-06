@@ -1,0 +1,10 @@
+{
+  "name": "visual-explainer",
+  "version": "1.0.0",
+  "description": "Turns explanations, architecture overviews, diff reviews and comparisons into self-contained HTML pages with diagrams and tables instead of walls of terminal text.",
+  "author": {
+    "name": "Xatsr"
+  },
+  "repository": "https://github.com/Xatsr/Xatsr",
+  "keywords": ["diagrams", "visualization", "html", "mermaid", "architecture"]
+}

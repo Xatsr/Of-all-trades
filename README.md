@@ -30,6 +30,8 @@ Or copy a single skill into your personal skills folder, e.g. `cp -r plugins/xat
 
 `tools/handoff-recorder/` records a ward handoff (ส่งเวร) live or from an iPhone audio file, transcribes Thai/English speech locally with Typhoon Whisper Turbo, and has Claude summarize it per patient by bed number. See its [README](tools/handoff-recorder/README.md).
 
+📱 **iPhone web app:** [https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/](https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/)
+
 ## Layout
 
 ```

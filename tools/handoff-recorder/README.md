@@ -1,6 +1,10 @@
 # Handoff recorder (ส่งเวร → สรุปรายเตียง)
 
-อัดเสียงส่งเวรแบบ realtime (หรือใช้ไฟล์เสียงจาก iPhone) → ถอดเสียงด้วย [Typhoon Whisper Turbo](https://huggingface.co/typhoon-ai/typhoon-whisper-turbo) → ให้ Claude สรุปเป็นรายเตียง เรียงตามเลขเตียง: Dx, อาการ, V/S, lines, meds, lab ที่ต้องตาม, สิ่งที่ต้องทำในเวร (checkbox) และเรื่องที่ต้องระวัง
+> ## 📱 เปิดใช้บน iPhone: **[https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/](https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/)**
+>
+> เปิดลิงก์ใน Safari → Share → **Add to Home Screen**
+
+อัดเสียงส่งเวรแบบ realtime (หรือใช้ไฟล์เสียงจาก iPhone) → ถอดเสียงด้วยโมเดล Typhoon บนเครื่อง → ให้ Claude สรุปเป็นรายเตียง เรียงตามเลขเตียง: Dx, อาการ, V/S, lines, meds, lab ที่ต้องตาม, สิ่งที่ต้องทำในเวร (checkbox) และเรื่องที่ต้องระวัง
 
 มี 2 แบบ:
 
@@ -18,11 +22,9 @@
 
 ถ้าหน้าเว็บปิดไปตอนโหลด Whisper ครั้งหน้าที่เปิด แอปจะเปลี่ยนกลับไปใช้โมเดลเล็กให้เอง
 
-**เปิดใช้ครั้งแรก (เจ้าของ repo ทำครั้งเดียว):** ไปที่ GitHub → Settings → Pages → Source: *Deploy from a branch* → เลือก branch `typhoon-whisper-turbo`, folder `/ (root)` → Save รอประมาณ 1 นาที แล้วเว็บแอปจะอยู่ที่
+**ลิงก์เว็บแอป:** [https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/](https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/)
 
-```
-https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/
-```
+เว็บนี้ deploy ด้วย GitHub Pages จาก branch `typhoon-whisper-turbo` (Settings → Pages → Deploy from a branch → `/ (root)`)
 
 **ใช้บน iPhone:**
 

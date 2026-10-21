@@ -51,6 +51,10 @@
   #lines p { margin: 0 0 6px; }
   #lines .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
   #lines .pending { color: var(--muted); font-style: italic; }
+  .recitem { border-top: 1px solid var(--line); padding: 10px 0; }
+  .recitem:first-child { border-top: 0; }
+  .recitem audio { width: 100%; margin: 6px 0; }
+  .recitem .row button { min-height: 40px; padding: 8px 12px; font-size: .9rem; }
   .empty { color: var(--muted); }
   .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
   select {
@@ -93,6 +97,10 @@
       <input id="voice" type="checkbox" style="width:20px;height:20px">
       ลดเสียงรบกวน: เปิดเมื่อคนพูดอยู่ใกล้มือถือ ถ้าคนพูดอยู่ไกลให้ปิดไว้ เพราะ iPhone จะตัดเสียงไกลทิ้งไปด้วย
     </label>
+    <label class="sub" style="display:flex;gap:8px;align-items:center;margin:8px 0 0">
+      <input id="keep" type="checkbox" checked style="width:20px;height:20px">
+      เก็บไฟล์เสียงที่อัดไว้ในเครื่อง
+    </label>
     <progress id="prog" max="100" value="0" hidden></progress>
     <div id="status"></div>
   </div>
@@ -117,6 +125,14 @@
       <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
     </details>
     <div id="summary" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <strong>เสียงที่อัดไว้</strong>
+      <span id="usage" class="sub" style="margin:0"></span>
+    </div>
+    <div id="recs"><p class="empty">ยังไม่มีไฟล์เสียง</p></div>
   </div>
 
   <div class="warn">
@@ -427,14 +443,16 @@ async function startRec() {
     const s = (Date.now() - started) / 1000;
     $('status').innerHTML = `<span class="dot"></span>กำลังอัด ${stamp(s).slice(1, -1)}`;
   }, 500);
-  rec = { stream, ctx, seg, lock, timer };
+  const saver = $('keep').checked ? await startSaving(stream) : null;
+  rec = { stream, ctx, seg, lock, timer, saver };
   $('rec').textContent = '■ หยุดอัด'; $('rec').className = 'rec big';
 }
 
 async function stopRec() {
-  const { stream, ctx, seg, lock, timer } = rec;
+  const { stream, ctx, seg, lock, timer, saver } = rec;
   rec = null;
   clearInterval(timer);
+  if (saver) await saver.stop();
   stream.getTracks().forEach(t => t.stop());
   await ctx.close();
   seg.flush();
@@ -457,11 +475,14 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ---------------------------------------------------------------- file upload (Voice Memos .m4a etc.)
-$('file').onchange = async e => {
+$('file').onchange = e => {
   const f = e.target.files[0];
   e.target.value = '';
-  if (!f) return;
-  status(`กำลังอ่านไฟล์ ${f.name}…`);
+  if (f) transcribeBlob(f, f.name);
+};
+
+async function transcribeBlob(f, name) {
+  status(`กำลังอ่านไฟล์ ${name}…`);
   try {
     const ctx = new AudioContext();
     const decoded = await ctx.decodeAudioData(await f.arrayBuffer());
@@ -475,7 +496,127 @@ $('file').onchange = async e => {
   } catch (err) {
     status('อ่านไฟล์ไม่ได้: ' + err.message);
   }
-};
+}
+
+// ---------------------------------------------------------------- saved recordings (IndexedDB)
+// Each recording is written as MediaRecorder chunks while it records, so a crash or a locked
+// screen keeps everything up to the last few seconds; stop() joins them into one file.
+const db = new Promise((resolve, reject) => {
+  const req = indexedDB.open('handoff', 1);
+  req.onupgradeneeded = () => {
+    req.result.createObjectStore('recordings', { keyPath: 'id' });
+    req.result.createObjectStore('chunks', { autoIncrement: true }).createIndex('rec', 'rec');
+  };
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+function tx(stores, mode, fn) {
+  return db.then(d => new Promise((resolve, reject) => {
+    const t = d.transaction(stores, mode);
+    const out = fn(t);
+    t.oncomplete = () => resolve(out && 'result' in out ? out.result : out);
+    t.onerror = () => reject(t.error);
+  }));
+}
+const recMime = () => ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm']
+  .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '';
+const extFor = mime => mime.includes('mp4') ? 'm4a' : 'webm';
+
+async function startSaving(stream) {
+  const mime = recMime();
+  if (!mime) { status('เบราว์เซอร์นี้บันทึกไฟล์เสียงไม่ได้ แต่ยังถอดเสียงได้ตามปกติ'); return null; }
+  const id = Date.now();
+  await tx(['recordings'], 'readwrite', t => t.objectStore('recordings').put({ id, mime, done: false }));
+  const mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 64000 });
+  const writes = [];
+  mr.ondataavailable = e => {
+    if (e.data.size) writes.push(tx(['chunks'], 'readwrite', t => t.objectStore('chunks').add({ rec: id, blob: e.data })).catch(() => {}));
+  };
+  const stopped = new Promise(r => { mr.onstop = r; });
+  mr.start(5000);  // a chunk every 5 s
+  return {
+    async stop() {
+      mr.stop();
+      await stopped;
+      await Promise.all(writes);
+      await finishRecording(id, Date.now() - id);
+    },
+  };
+}
+
+async function finishRecording(id, ms) {
+  const chunks = await tx(['chunks'], 'readonly', t => t.objectStore('chunks').index('rec').getAll(id));
+  const meta = await tx(['recordings'], 'readonly', t => t.objectStore('recordings').get(id));
+  if (!meta) return;
+  if (!chunks.length) { await tx(['recordings'], 'readwrite', t => t.objectStore('recordings').delete(id)); return; }
+  const blob = new Blob(chunks.map(c => c.blob), { type: meta.mime.split(';')[0] });
+  await tx(['recordings', 'chunks'], 'readwrite', t => {
+    t.objectStore('recordings').put({ ...meta, blob, size: blob.size, ms: ms ?? meta.ms ?? null, done: true });
+    const range = IDBKeyRange.only(id), idx = t.objectStore('chunks').index('rec');
+    idx.openKeyCursor(range).onsuccess = e => { const c = e.target.result; if (c) { t.objectStore('chunks').delete(c.primaryKey); c.continue(); } };
+  });
+  renderRecs();
+}
+
+const fmtDate = id => new Date(id).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+const fmtDur = ms => ms == null ? '' : stamp(ms / 1000).slice(1, -1);
+
+async function renderRecs() {
+  let all = [];
+  try { all = await tx(['recordings'], 'readonly', t => t.objectStore('recordings').getAll()); } catch { return; }
+  const box = $('recs');
+  box.replaceChildren();
+  all = all.filter(r => r.done).sort((a, b) => b.id - a.id);
+  if (!all.length) box.innerHTML = '<p class="empty">ยังไม่มีไฟล์เสียง</p>';
+  for (const r of all) {
+    const item = document.createElement('div');
+    item.className = 'recitem';
+    const title = document.createElement('div');
+    title.innerHTML = `<strong></strong> <span class="sub"></span>`;
+    title.querySelector('strong').textContent = fmtDate(r.id);
+    title.querySelector('.sub').textContent = `${fmtDur(r.ms)} · ${(r.size / 1e6).toFixed(1)} MB`;
+    const audio = document.createElement('audio');
+    audio.controls = true; audio.preload = 'none';
+    audio.src = URL.createObjectURL(r.blob);
+    const row = document.createElement('div');
+    row.className = 'row';
+    const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; row.append(b); };
+    const d = new Date(r.id), pad = n => String(n).padStart(2, '0');
+    const fileName = `handoff-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${extFor(r.mime)}`;
+    btn('บันทึกลง Files / แชร์', () => shareRec(r, fileName));
+    btn('ถอดเสียงอีกครั้ง', () => ready ? transcribeBlob(r.blob, fileName) : status('โหลดโมเดลก่อน แล้วค่อยกดถอดเสียงอีกครั้ง'));
+    btn('ลบ', async () => {
+      if (!confirm(`ลบไฟล์เสียง ${fmtDate(r.id)}?`)) return;
+      await tx(['recordings'], 'readwrite', t => t.objectStore('recordings').delete(r.id));
+      renderRecs();
+    });
+    item.append(title, audio, row);
+    box.append(item);
+  }
+  try {
+    const { usage } = await navigator.storage.estimate();
+    $('usage').textContent = `ใช้พื้นที่ ${(usage / 1e6).toFixed(0)} MB`;
+  } catch {}
+}
+
+async function shareRec(r, fileName) {
+  const file = new File([r.blob], fileName, { type: r.blob.type });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = fileName;
+  document.body.append(a); a.click(); a.remove();
+}
+
+// Recordings cut off by a crash or a closed tab still have their chunks: finish them now.
+(async () => {
+  try {
+    const all = await tx(['recordings'], 'readonly', t => t.objectStore('recordings').getAll());
+    for (const r of all.filter(r => !r.done)) await finishRecording(r.id, null);
+  } catch {}
+  renderRecs();
+})();
 
 // ---------------------------------------------------------------- copy / clear
 async function copy(text, okMsg) {
@@ -494,6 +635,8 @@ $('clear').onclick = () => {
 
 // ---------------------------------------------------------------- summary via Claude API
 $('voice').checked = store.get('handoff.voice') === 'on';
+$('keep').checked = store.get('handoff.keep') !== 'off';
+$('keep').onchange = () => store.set('handoff.keep', $('keep').checked ? 'on' : 'off');
 $('voice').onchange = () => store.set('handoff.voice', $('voice').checked ? 'on' : 'off');
 $('key').value = store.get('handoff.key') || '';
 $('key').onchange = () => store.set('handoff.key', $('key').value.trim());

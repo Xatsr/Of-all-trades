@@ -13,19 +13,53 @@ const FILES = { encoder: 'encoder.int8.onnx', decoder: 'decoder.int8.onnx', join
 const SIZES = { 'encoder.int8.onnx': 131113606, 'decoder.int8.onnx': 4611223, 'joiner.int8.onnx': 2067638, 'tokens.txt': 35094 };
 const CACHE = 'typhoon-asr-realtime-v1';
 
-// ---------------------------------------------------------------- download with progress + cache
-async function getFile(name) {
-  const url = REPO + name;
-  let cache = null;
-  try { cache = await caches.open(CACHE); } catch {}
+// ---------------------------------------------------------------- on-device storage
+// Model files go in the Origin Private File System (OPFS), which Safari keeps more reliably than
+// the Cache API for large files; the Cache API is the fallback. `saved` records whether every
+// file made it to disk, so the page can say when the next visit will have to download again.
+let saved = true, fromDisk = true;
+
+async function opfsDir() {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(CACHE, { create: true });
+}
+
+async function readStored(name) {
   try {
-    const hit = cache && await cache.match(url);
-    if (hit) {
-      const buf = new Uint8Array(await hit.arrayBuffer());
-      self.postMessage({ type: 'progress', file: name, loaded: buf.length, total: buf.length });
-      return buf;
-    }
+    const file = await (await (await opfsDir()).getFileHandle(name)).getFile();
+    if (file.size === SIZES[name]) return new Uint8Array(await file.arrayBuffer());
   } catch {}
+  try {
+    const hit = await (await caches.open(CACHE)).match(REPO + name);
+    if (hit) return new Uint8Array(await hit.arrayBuffer());
+  } catch {}
+  return null;
+}
+
+async function store(name, bytes) {
+  try {
+    const handle = await (await opfsDir()).getFileHandle(name, { create: true });
+    const access = await handle.createSyncAccessHandle();  // worker-only API, Safari 15.2+
+    try {
+      access.truncate(0);
+      if (access.write(bytes, { at: 0 }) !== bytes.length) throw new Error('short write');
+      access.flush();
+    } finally { access.close(); }
+    return true;
+  } catch {}
+  try { await (await caches.open(CACHE)).put(REPO + name, new Response(bytes)); return true; } catch {}
+  return false;
+}
+
+// ---------------------------------------------------------------- download with progress
+async function getFile(name) {
+  const stored = await readStored(name);
+  if (stored) {
+    self.postMessage({ type: 'progress', file: name, loaded: stored.length, total: stored.length });
+    return stored;
+  }
+  fromDisk = false;
+  const url = REPO + name;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`download ${name}: HTTP ${res.status}`);
   const total = Number(res.headers.get('content-length')) || SIZES[name];
@@ -42,7 +76,7 @@ async function getFile(name) {
   }
   let out = buf.subarray(0, loaded);
   if (chunks) { out = new Uint8Array(loaded); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; } }
-  try { await cache?.put(url, new Response(out)); } catch {}
+  if (!(await store(name, out))) saved = false;
   return out;
 }
 
@@ -196,7 +230,7 @@ self.onmessage = async ({ data }) => {
     if (data.type === 'load') {
       await load();
       await transcribe(new Float32Array(SR));  // warm up
-      self.postMessage({ type: 'ready' });
+      self.postMessage({ type: 'ready', fromDisk, saved });
     } else if (data.type === 'transcribe') {
       self.postMessage({ type: 'result', id: data.id, text: await transcribe(data.audio) });
     }

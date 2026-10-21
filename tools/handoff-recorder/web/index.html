@@ -254,8 +254,12 @@ function onWorkerMessage({ data }) {
     $('filelabel').hidden = false;
     $('engine').disabled = true;
     store.set('handoff.loading', '');
+    store.set('handoff.saved', engine === 'small' && data.saved ? 'small' : '');
     const where = engine === 'whisper' ? (backend.device === 'webgpu' ? ', GPU' : ', CPU') : '';
-    status(`พร้อมแล้ว (${ENGINES[engine].label}${where}) กดเริ่มอัดได้เลย`);
+    const kept = data.saved === false
+      ? '\n⚠️ เก็บโมเดลไว้ในเครื่องไม่ได้ ครั้งหน้าจะต้องโหลดใหม่ (ถ้าเปิดแบบ Private ให้เปิดแบบปกติ หรือเช็คว่าพื้นที่เครื่องเต็มไหม)'
+      : data.fromDisk ? ' · โหลดจากเครื่อง ไม่ใช้เน็ต' : data.saved ? ' · เก็บโมเดลไว้ในเครื่องแล้ว ครั้งหน้าไม่ต้องโหลดใหม่' : '';
+    status(`พร้อมแล้ว (${ENGINES[engine].label}${where}) กดเริ่มอัดได้เลย${kept}`);
   } else if (data.type === 'result' || data.type === 'error') {
     const cb = waiting.get(data.id);
     if (cb) { waiting.delete(data.id); cb(data); }
@@ -311,6 +315,8 @@ $('load').onclick = async () => {
   for (const k in files) delete files[k];
   store.set('handoff.engine', engine);
   store.set('handoff.loading', engine);
+  // Ask Safari not to evict the downloaded model (granted most readily to Home Screen apps).
+  try { await navigator.storage?.persist?.(); } catch {}
   worker = ENGINES[engine].worker();
   worker.onmessage = onWorkerMessage;
   if (engine === 'whisper') {
@@ -534,7 +540,9 @@ $('sum').onclick = async () => {
 };
 
 render();
-if (crashed) status(crashed === 'whisper'
+// The model is already on this device: load it straight away instead of waiting for a tap.
+if (!crashed && engine === 'small' && store.get('handoff.saved') === 'small') $('load').click();
+else if (crashed) status(crashed === 'whisper'
   ? 'ครั้งก่อนหน้าเว็บปิดไประหว่างโหลด Whisper (เครื่องน่าจะ RAM ไม่พอ) เปลี่ยนเป็นโมเดลเล็กให้แล้ว กดโหลดโมเดลได้เลย'
   : 'ครั้งก่อนหน้าเว็บปิดไประหว่างโหลดโมเดล ลองกดโหลดใหม่อีกครั้ง');
 else if (lines.length) status('มี transcript ค้างจากครั้งก่อน โหลดโมเดลเพื่ออัดต่อ หรือสรุปได้เลย');

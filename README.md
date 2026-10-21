@@ -1,14 +1,17 @@
-# Xatsr plugin marketplace
+# Of all trades
 
-A [Claude Code](https://code.claude.com) plugin marketplace.
+[Claude Code](https://code.claude.com) plugins by Xatsr.
 
-## Install
+## Use
+
+Load a plugin directly from its folder:
 
 ```shell
-/plugin marketplace add Xatsr/Xatsr
-/plugin install xatsr-toolkit@xatsr
-/plugin install visual-explainer@xatsr
+claude --plugin-dir ./plugins/xatsr-toolkit
+claude --plugin-dir ./plugins/visual-explainer
 ```
+
+Or copy a single skill into your personal skills folder, e.g. `cp -r plugins/visual-explainer/skills/visual-explainer ~/.claude/skills/`.
 
 ## Plugins
 
@@ -33,7 +36,6 @@ Renders explanations as self-contained HTML pages (Mermaid diagrams, architectur
 ## Layout
 
 ```
-.claude-plugin/marketplace.json      # marketplace catalog
 plugins/
   xatsr-toolkit/
     .claude-plugin/plugin.json       # plugin manifest
@@ -53,5 +55,4 @@ plugins/
 
 1. Create `plugins/<name>/.claude-plugin/plugin.json` with at least `name`, `version` and `description`.
 2. Add `commands/`, `agents/`, `skills/`, `hooks/hooks.json` or `.mcp.json` as needed.
-3. Add an entry to `plugins` in `.claude-plugin/marketplace.json` with `"source": "./plugins/<name>"`.
-4. Run `claude plugin validate .` before pushing.
+3. Run `claude plugin validate plugins/<name>` before pushing.

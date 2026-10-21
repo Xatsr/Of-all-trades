@@ -122,6 +122,18 @@ td:first-child { font-weight: 600; }
 }
 .steps li:not(:last-child)::after { content: ""; position: absolute; left: 14px; top: 32px; bottom: 2px; width: 2px; background: var(--line); }
 
+/* ---------- Flowchart (causal chain / algorithm) ---------- */
+.flow { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 12px 0 16px; }
+.node { border: 1.5px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius); padding: 8px 12px; text-align: center; font-weight: 500; }
+.node small { display: block; font-weight: 400; color: var(--ink-soft); }
+.node.warn { border-color: var(--warn); background: var(--warn-soft); }
+.node.ok { border-color: var(--ok); background: var(--ok-soft); }
+.arrow { align-self: center; color: var(--ink-soft); line-height: 1; padding: 4px 0; font-size: 1.1rem; }
+.arrow::before { content: "↓"; }
+.arrow[data-label]::after { content: " " attr(data-label); font-size: .8rem; }
+.branch { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.branch > .flow { margin: 0; }
+
 /* ---------- Tags ---------- */
 .tag { display: inline-block; font-size: .78rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
@@ -152,7 +164,7 @@ details .answer { color: var(--ok); font-weight: 600; }
   section { border: 0; padding: 0; margin: 0 0 14pt; break-inside: auto; }
   h2 { break-after: avoid; border-bottom: 1.5pt solid var(--accent); padding-bottom: 3pt; }
   h3 { break-after: avoid; }
-  .box, .card, tr, .steps li, details { break-inside: avoid; }
+  .box, .card, tr, .steps li, details, .flow { break-inside: avoid; }
   .toc { break-after: page; border: 0; padding: 0; }
   details { border: 0; padding: 0; }
   details::details-content { content-visibility: visible; display: block; }  /* print answers */
@@ -201,6 +213,16 @@ details .answer { color: var(--ok); font-weight: 600; }
   <div class="compare">
     <div class="card"><h3>Option A</h3><ul><li>…</li></ul></div>
     <div class="card"><h3>Option B</h3><ul><li>…</li></ul></div>
+  </div>
+  <div class="flow">
+    <div class="node">Cause</div>
+    <div class="arrow"></div>
+    <div class="node">Mechanism <small>short explanation</small></div>
+    <div class="arrow" data-label="leads to"></div>
+    <div class="branch">
+      <div class="flow"><div class="node">Effect A</div><div class="arrow"></div><div class="node warn">Symptom / sign</div></div>
+      <div class="flow"><div class="node">Effect B</div><div class="arrow"></div><div class="node ok">Treatment target</div></div>
+    </div>
   </div>
   <ol class="steps">
     <li><strong>Step</strong> — what to do and why.</li>

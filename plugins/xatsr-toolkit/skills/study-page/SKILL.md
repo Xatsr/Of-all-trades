@@ -27,6 +27,7 @@ Every HTML page uses the template at `templates/base.html` (relative to this ski
 | Comparing 3+ items on the same attributes | `.table-wrap` + `<table>` (first column = item name) |
 | Two or three things side by side | `.compare` with `.card` |
 | Algorithm, procedure, management steps | `<ol class="steps">` |
+| Causal chain, pathophysiology, decision tree | `.flow` of `.node` and `.arrow` (optional `data-label`); split with `.branch` holding several `.flow`; `.node.warn` for symptoms or danger, `.node.ok` for treatment targets |
 | Short status label | `<span class="tag">`, `.tag.warn`, `.tag.ok` |
 | One fact to remember inside a paragraph | `<mark>` (at most one per paragraph) |
 | Self-check question | `<details><summary>Q</summary><p class="answer">A</p></details>` |

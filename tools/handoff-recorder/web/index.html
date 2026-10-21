@@ -121,7 +121,7 @@ const CLAUDE_MODEL = 'claude-opus-5-5';
 const SR = 16000;
 // Segmenter: cut at a pause so each piece stays under Whisper's 30 s window.
 const FRAME = 480;                 // 30 ms at 16 kHz
-const MIN_SEG_S = 3, MAX_SEG_S = 25, PAUSE_S = 0.7;
+const MIN_SEG_S = 6, MAX_SEG_S = 25, PAUSE_S = 0.7, CUT_FROM_S = 12;
 
 const SUMMARY_PROMPT = `You turn a speech-to-text transcript of a Thai hospital ward handoff (ส่งเวร) into a handoff sheet.
 
@@ -198,7 +198,9 @@ self.onmessage = async ({ data }) => {
       self.postMessage({ type: 'ready' });
     } else if (data.type === 'transcribe') {
       const out = await asr(data.audio, { language: 'thai', task: 'transcribe' });
-      self.postMessage({ type: 'result', id: data.id, text: out.text.trim() });
+      // Whisper sometimes loops on noise; keep one copy of a phrase repeated 4+ times.
+      const text = out.text.trim().replace(/(.{2,40}?)\\1{3,}/gu, '$1');
+      self.postMessage({ type: 'result', id: data.id, text });
     }
   } catch (e) {
     self.postMessage({ type: 'error', id: data.id, message: String(e && e.message || e) });
@@ -275,7 +277,7 @@ $('load').onclick = async () => {
 class Segmenter {
   constructor(onSegment) {
     this.onSegment = onSegment;
-    this.buf = []; this.bufLen = 0; this.carry = new Float32Array(0);
+    this.frames = []; this.levels = []; this.carry = new Float32Array(0);
     this.total = 0; this.segStart = 0; this.quiet = 0; this.floor = null;
   }
   push(samples) {
@@ -290,20 +292,34 @@ class Segmenter {
     const rms = Math.sqrt(e / f.length + 1e-12);
     // Track the noise floor slowly so steady background noise is not "speech".
     this.floor = this.floor === null ? rms : Math.min(this.floor * 1.002 + 1e-6, Math.max(this.floor * 0.98, rms));
-    this.quiet = rms < Math.max(this.floor * 2.5, 0.004) ? this.quiet + 1 : 0;
-    this.buf.push(f.slice()); this.bufLen += f.length; this.total += f.length;
-    const len = this.bufLen / SR;
-    if ((len >= MIN_SEG_S && this.quiet * FRAME / SR >= PAUSE_S) || len >= MAX_SEG_S) this.cut();
+    this.quiet = rms < Math.max(this.floor * 1.5, 0.004) ? this.quiet + 1 : 0;
+    this.frames.push(f.slice()); this.levels.push(rms); this.total += f.length;
+    const len = this.frames.length * FRAME / SR;
+    if (len >= MIN_SEG_S && this.quiet * FRAME / SR >= PAUSE_S) this.emit(this.frames.length);
+    else if (len >= MAX_SEG_S) this.emit(this.quietestCut());
   }
-  cut() {
-    if (!this.bufLen) return;
-    const out = new Float32Array(this.bufLen);
-    let o = 0; for (const b of this.buf) { out.set(b, o); o += b.length; }
-    const allQuiet = this.quiet * FRAME >= this.bufLen * 0.9;
-    if (!allQuiet) this.onSegment(this.segStart, out);
-    this.segStart = this.total / SR; this.buf = []; this.bufLen = 0; this.quiet = 0;
+  // A noisy ward never goes silent, so cut at the quietest moment after CUT_FROM_S instead.
+  quietestCut() {
+    const lo = Math.round(CUT_FROM_S * SR / FRAME), L = this.levels, W = 5;
+    let best = L.length, bestLevel = Infinity;
+    for (let i = lo; i < L.length - W; i++) {
+      let m = 0; for (let k = i - W; k <= i + W; k++) m += L[k];
+      if (m < bestLevel) { bestLevel = m; best = i; }
+    }
+    return best;
   }
-  flush() { if (this.carry.length) { this.buf.push(this.carry); this.bufLen += this.carry.length; this.total += this.carry.length; this.carry = new Float32Array(0); } this.cut(); }
+  emit(n) {
+    if (!n) return;
+    const take = this.frames.splice(0, n), lv = this.levels.splice(0, n);
+    const out = new Float32Array(take.length * FRAME);
+    take.forEach((b, i) => out.set(b, i * FRAME));
+    if (Math.max(...lv) > 0.003) this.onSegment(this.segStart, out);  // skip digital silence only
+    this.segStart += n * FRAME / SR; this.quiet = 0;
+  }
+  flush() {
+    if (this.carry.length) { const f = new Float32Array(FRAME); f.set(this.carry); this.carry = new Float32Array(0); this.frames.push(f); this.levels.push(0.004); }
+    this.emit(this.frames.length);
+  }
 }
 
 class Resampler {  // linear, streaming, any rate -> 16 kHz

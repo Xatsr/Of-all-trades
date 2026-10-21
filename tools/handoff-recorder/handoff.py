@@ -13,6 +13,7 @@ import argparse
 import datetime as dt
 import pathlib
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -26,9 +27,10 @@ CLAUDE_MODEL = "claude-opus-5-5"
 
 # Segmenter: cut at a pause so each piece stays under Whisper's 30 s window.
 FRAME_S = 0.03
-MIN_SEG_S = 3.0
+MIN_SEG_S = 6.0
 MAX_SEG_S = 25.0
 PAUSE_S = 0.7
+CUT_FROM_S = 12.0  # file mode: earliest point to look for a cut
 
 
 # ---------------------------------------------------------------- transcription
@@ -68,41 +70,45 @@ class Transcriber:
             segments, sampling_rate=SR, return_tensors="pt"
         ).input_features.to(self.device, self.dtype)
         with self.torch.inference_mode():
-            out = self.model.generate(feats, **self.gen_kwargs)
+            out = self.model.generate(feats, max_new_tokens=220, **self.gen_kwargs)
         texts = self.processor.batch_decode(out, skip_special_tokens=True)
         if self.prompt:
             texts = [t.removeprefix(" " + self.prompt).removeprefix(self.prompt) for t in texts]
-        return [t.strip() for t in texts]
+        return [collapse_repeats(t.strip()) for t in texts]
+
+
+def collapse_repeats(text):
+    """Whisper sometimes loops on noise ("ตอนแรกสมาธิตอนแรกสมาธิ..."); keep one copy."""
+    return re.sub(r"(.{2,40}?)\1{3,}", r"\1", text)
 
 
 def split_on_pauses(audio):
-    """Split a long recording into speech segments of MIN_SEG_S..MAX_SEG_S seconds.
+    """Split a long recording into segments of up to MAX_SEG_S seconds.
 
-    Returns (start_seconds, samples) pairs. Silence is judged against the
-    recording's own noise floor, so it works for quiet wards and noisy ones.
+    Each cut goes at the quietest moment between CUT_FROM_S and MAX_SEG_S, so it
+    lands in a gap between words even in a noisy ward where there is never real
+    silence. Returns (start_seconds, samples) pairs; nothing is dropped except
+    stretches of digital silence.
     """
     hop = int(FRAME_S * SR)
     n = len(audio) // hop
     if n == 0:
         return []
     rms = np.sqrt(np.mean(audio[: n * hop].reshape(n, hop) ** 2, axis=1) + 1e-12)
-    threshold = max(np.percentile(rms, 20) * 2.5, 0.004)
-    voiced = rms > threshold
+    smooth = np.convolve(rms, np.ones(10) / 10, mode="same")  # ~0.3 s window
 
-    segments, start, quiet = [], 0, 0
-    for i in range(n):
-        quiet = 0 if voiced[i] else quiet + 1
-        length = (i + 1 - start) * FRAME_S
-        if (length >= MIN_SEG_S and quiet * FRAME_S >= PAUSE_S) or length >= MAX_SEG_S:
-            segments.append((start, i + 1))
-            start, quiet = i + 1, 0
-    if n - start > 0:
-        segments.append((start, n))
+    lo, hi = int(CUT_FROM_S / FRAME_S), int(MAX_SEG_S / FRAME_S)
+    segments, start = [], 0
+    while n - start > hi:
+        cut = start + lo + int(np.argmin(smooth[start + lo : start + hi]))
+        segments.append((start, cut))
+        start = cut
+    segments.append((start, n))
 
     return [
         (s * FRAME_S, audio[s * hop : e * hop])
         for s, e in segments
-        if voiced[s:e].mean() > 0.1  # drop segments that are almost all silence
+        if e - s > 10 and rms[s:e].max() > 0.003
     ]
 
 
@@ -162,7 +168,7 @@ def record_live(asr, out_dir):
                 rms = float(np.sqrt(np.mean(chunk ** 2) + 1e-12))
                 # Track the noise floor slowly so steady background noise is not "speech".
                 floor = rms if floor is None else min(floor * 1.002 + 1e-6, max(floor * 0.98, rms))
-                quiet = quiet + 1 if rms < max(floor * 2.5, 0.004) else 0
+                quiet = quiet + 1 if rms < max(floor * 1.5, 0.004) else 0
                 length = len(buf) * FRAME_S
                 if (length >= MIN_SEG_S and quiet * FRAME_S >= PAUSE_S) or length >= MAX_SEG_S:
                     segments.put((seg_start, np.concatenate(buf)))

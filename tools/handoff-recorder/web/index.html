@@ -89,6 +89,10 @@
       <label class="filebtn" id="filelabel" hidden>📁 เลือกไฟล์เสียง<input id="file" type="file" accept="audio/*,video/*,.m4a"></label>
       <button id="clear" hidden>ล้าง</button>
     </div>
+    <label class="sub" style="display:flex;gap:8px;align-items:center;margin:10px 0 0">
+      <input id="voice" type="checkbox" checked style="width:20px;height:20px">
+      ลดเสียงรบกวนรอบข้าง (ใช้ระบบเสียงสนทนาของ iPhone ถ้าเสียงเบาหรือขาด ๆ ให้ลองปิด)
+    </label>
     <progress id="prog" max="100" value="0" hidden></progress>
     <div id="status"></div>
   </div>
@@ -395,8 +399,11 @@ class Tap extends AudioWorkletProcessor {
 registerProcessor('tap', Tap);`;
 
 async function startRec() {
+  const voice = $('voice').checked;
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+    // echoCancellation turns on the iPhone's voice-processing path (as in a FaceTime call): it
+    // suppresses background noise and makes Control Center's Mic Mode / Voice Isolation available.
+    audio: { channelCount: 1, echoCancellation: voice, noiseSuppression: voice, autoGainControl: true },
   });
   const ctx = new AudioContext();
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'text/javascript' })));
@@ -480,6 +487,8 @@ $('clear').onclick = () => {
 };
 
 // ---------------------------------------------------------------- summary via Claude API
+$('voice').checked = store.get('handoff.voice') !== 'off';
+$('voice').onchange = () => store.set('handoff.voice', $('voice').checked ? 'on' : 'off');
 $('key').value = store.get('handoff.key') || '';
 $('key').onchange = () => store.set('handoff.key', $('key').value.trim());
 

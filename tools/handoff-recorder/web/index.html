@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ส่งเวร">
+<meta name="theme-color" content="#0f766e">
+<title>Handoff Recorder</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #17202a; --muted: #5d6b7a; --line: #dde3ea;
+    --accent: #0f766e; --accent-text: #ffffff; --rec: #c0392b; --warn-bg: #fff6e0; --warn: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1419; --card: #182028; --text: #e6edf3; --muted: #98a6b3; --line: #2a3540;
+      --accent: #2dd4bf; --accent-text: #062b27; --rec: #ff6b5b; --warn-bg: #2d2410; --warn: #f5c46b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1419; --card: #182028; --text: #e6edf3; --muted: #98a6b3; --line: #2a3540;
+    --accent: #2dd4bf; --accent-text: #062b27; --rec: #ff6b5b; --warn-bg: #2d2410; --warn: #f5c46b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Sukhumvit Set", "Noto Sans Thai", system-ui, sans-serif;
+    padding: env(safe-area-inset-top) 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 18px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button, .filebtn {
+    appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 12px; padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer;
+    min-height: 48px;
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+  button.rec { background: var(--rec); color: #fff; border-color: transparent; }
+  button:disabled { opacity: .45; cursor: default; }
+  .big { flex: 1 1 100%; font-size: 1.1rem; min-height: 60px; }
+  #status { color: var(--muted); font-size: .9rem; margin-top: 10px; white-space: pre-wrap; }
+  progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--accent); }
+  #lines { max-height: 45vh; overflow-y: auto; font-size: .95rem; }
+  #lines p { margin: 0 0 6px; }
+  #lines .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  #lines .pending { color: var(--muted); font-style: italic; }
+  .empty { color: var(--muted); }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
+  input[type=password] {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  details summary { cursor: pointer; font-weight: 600; }
+  #summary h1, #summary h2 { font-size: 1.1rem; margin: 16px 0 6px; }
+  #summary h1:first-child, #summary h2:first-child { margin-top: 0; }
+  #summary ul { padding-left: 20px; margin: 4px 0; }
+  #summary li { margin: 2px 0; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--rec); margin-right: 6px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .2; } }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🩺 ส่งเวร → สรุปรายเตียง</h1>
+  <p class="sub">ถอดเสียงด้วย Typhoon Whisper Turbo บนเครื่องนี้ เสียงไม่ถูกส่งออกไปไหน</p>
+
+  <div class="card">
+    <div class="row">
+      <button id="load" class="primary big">โหลดโมเดล (~560 MB ครั้งแรก)</button>
+      <button id="rec" class="big" hidden disabled>● เริ่มอัด</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="filebtn" id="filelabel" hidden>📁 เลือกไฟล์เสียง<input id="file" type="file" accept="audio/*,video/*,.m4a"></label>
+      <button id="clear" hidden>ล้าง</button>
+    </div>
+    <progress id="prog" max="100" value="0" hidden></progress>
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <strong>Transcript</strong>
+      <button id="copyT" disabled>คัดลอก</button>
+    </div>
+    <div id="lines"><p class="empty">ยังไม่มีข้อความ</p></div>
+  </div>
+
+  <div class="card">
+    <strong>สรุปรายเตียง</strong>
+    <div class="row" style="margin-top:10px">
+      <button id="copyP" disabled>คัดลอกไปวางใน Claude app</button>
+      <button id="sum" class="primary" disabled>สรุปเลย (API key)</button>
+    </div>
+    <details style="margin-top:12px">
+      <summary>ตั้งค่า API key</summary>
+      <p class="sub" style="margin-top:8px">ใช้ key จาก platform.claude.com เก็บไว้ในเครื่องนี้เท่านั้น ถ้าไม่ใส่ ให้ใช้ปุ่ม "คัดลอกไปวางใน Claude app" แทน</p>
+      <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
+    </details>
+    <div id="summary" style="margin-top:12px"></div>
+  </div>
+
+  <div class="warn">
+    ระหว่างอัด เปิดหน้านี้ค้างไว้: ถ้าล็อกจอหรือสลับไปแอปอื่น iPhone จะหยุดไมค์ หน้านี้พยายามกันจอดับให้แล้ว
+    ถ้าอยากล็อกจอระหว่างอัด ให้อัดด้วย Voice Memos แล้วใช้ปุ่ม "เลือกไฟล์เสียง" แทน
+  </div>
+</main>
+
+<script type="module">
+// ---------------------------------------------------------------- config
+const MODEL = '2nuttertools/typhoon-whisper-turbo';  // ONNX export of typhoon-ai/typhoon-whisper-turbo
+const TRANSFORMERS = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/+esm';
+const ANTHROPIC_SDK = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.131.0/+esm';
+const MARKED = 'https://cdn.jsdelivr.net/npm/marked@12.0.2/+esm';
+const PURIFY = 'https://cdn.jsdelivr.net/npm/dompurify@3.1.6/+esm';
+const CLAUDE_MODEL = 'claude-opus-5-5';
+const SR = 16000;
+// Segmenter: cut at a pause so each piece stays under Whisper's 30 s window.
+const FRAME = 480;                 // 30 ms at 16 kHz
+const MIN_SEG_S = 3, MAX_SEG_S = 25, PAUSE_S = 0.7;
+
+const SUMMARY_PROMPT = `You turn a speech-to-text transcript of a Thai hospital ward handoff (ส่งเวร) into a handoff sheet.
+
+The transcript comes from Thai ASR, so English medical words are often transliterated or misheard
+(e.g. "นิวโมเนีย" = pneumonia, "เซฟไตรอะโซน" = ceftriaxone, "Full Roll Semi" = furosemide,
+"Intech Output" = intake/output). Write medical terms, drugs, labs and abbreviations in English;
+write everything else in Thai, the way a Thai doctor or nurse writes notes.
+
+Rules:
+- One section per patient, sorted by bed number (เตียง). Heading: \`## เตียง <n> — <name if said>, <age/sex if said>\`.
+- Patients with no bed number said go last under \`## ไม่ระบุเตียง\`.
+- Under each patient, include only what was said, as short bullets, in this order and skipping empty ones:
+  **Dx**, **ปัญหาตอนนี้ / อาการ**, **V/S & O2**, **Lines / tubes / drains**, **Meds สำคัญ**,
+  **Lab / imaging ที่ต้องตาม**, **ต้องทำเวรนี้** (as \`- [ ]\` checkboxes), **⚠️ ต้องระวัง**.
+- Never invent findings, doses or numbers. If a word or number is unclear from the transcript, keep your
+  best reading and mark it \`(?)\`.
+- Start with a 1-3 line \`# สรุปส่งเวร\` overview: number of patients and the sickest / most urgent beds.
+- End with \`## ⚠️ To-do รวมเรียงตามความเร่งด่วน\`: every pending task across patients, each prefixed with its bed number.`;
+
+// ---------------------------------------------------------------- dom helpers
+const $ = id => document.getElementById(id);
+const status = msg => { $('status').textContent = msg; };
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+const stamp = s => `[${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}]`;
+
+// ---------------------------------------------------------------- transcript state
+let lines = [];
+try { lines = JSON.parse(store.get('handoff.lines') || '[]'); } catch {}
+const transcriptText = () => lines.map(l => `${stamp(l.t)} ${l.text}`).join('\n');
+let pending = 0;
+
+function render() {
+  const box = $('lines');
+  box.replaceChildren();
+  if (!lines.length && !pending) {
+    box.innerHTML = '<p class="empty">ยังไม่มีข้อความ</p>';
+  }
+  for (const l of lines) {
+    const p = document.createElement('p');
+    const t = document.createElement('span');
+    t.className = 't'; t.textContent = stamp(l.t);
+    p.append(t, l.text);
+    box.append(p);
+  }
+  if (pending) {
+    const p = document.createElement('p');
+    p.className = 'pending'; p.textContent = `กำลังถอดเสียง… (${pending})`;
+    box.append(p);
+  }
+  box.scrollTop = box.scrollHeight;
+  const has = lines.length > 0;
+  $('copyT').disabled = $('copyP').disabled = $('sum').disabled = !has;
+  $('clear').hidden = !has;
+  store.set('handoff.lines', JSON.stringify(lines));
+}
+
+// ---------------------------------------------------------------- ASR worker
+const workerSrc = `
+import { pipeline, env } from '${TRANSFORMERS}';
+env.allowLocalModels = false;
+let asr;
+self.onmessage = async ({ data }) => {
+  try {
+    if (data.type === 'load') {
+      asr = await pipeline('automatic-speech-recognition', data.model, {
+        device: data.device, dtype: data.dtype,
+        progress_callback: p => self.postMessage({ type: 'progress', status: p.status, file: p.file, loaded: p.loaded, total: p.total }),
+      });
+      // Warm up so the first real segment isn't slow.
+      await asr(new Float32Array(16000), { language: 'thai', task: 'transcribe' });
+      self.postMessage({ type: 'ready' });
+    } else if (data.type === 'transcribe') {
+      const out = await asr(data.audio, { language: 'thai', task: 'transcribe' });
+      self.postMessage({ type: 'result', id: data.id, text: out.text.trim() });
+    }
+  } catch (e) {
+    self.postMessage({ type: 'error', id: data.id, message: String(e && e.message || e) });
+  }
+};`;
+const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })), { type: 'module' });
+const waiting = new Map();
+let nextId = 0, ready = false;
+const files = {};
+
+worker.onmessage = ({ data }) => {
+  if (data.type === 'progress') {
+    if (data.file && data.total) files[data.file] = [data.loaded || 0, data.total];
+    const all = Object.values(files);
+    const loaded = all.reduce((a, f) => a + f[0], 0), total = all.reduce((a, f) => a + f[1], 0);
+    if (total) {
+      $('prog').hidden = false;
+      $('prog').value = 100 * loaded / total;
+      status(`กำลังโหลดโมเดล ${(loaded / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB`);
+    }
+    if (data.status === 'ready') status('กำลังเตรียมโมเดล…');
+  } else if (data.type === 'ready') {
+    ready = true;
+    $('prog').hidden = true;
+    $('load').hidden = true;
+    $('rec').hidden = false; $('rec').disabled = false;
+    $('filelabel').hidden = false;
+    status(`พร้อมแล้ว (${backend.device === 'webgpu' ? 'GPU' : 'CPU'}) กดเริ่มอัดได้เลย`);
+  } else if (data.type === 'result' || data.type === 'error') {
+    const cb = waiting.get(data.id);
+    if (cb) { waiting.delete(data.id); cb(data); }
+    else if (data.type === 'error') { status('โหลดโมเดลไม่สำเร็จ: ' + data.message); $('load').disabled = false; }
+  }
+};
+
+function transcribe(t0, audio) {
+  const id = nextId++;
+  pending++; render();
+  waiting.set(id, res => {
+    pending--;
+    if (res.type === 'result' && res.text) {
+      lines.push({ t: t0, text: res.text });
+      lines.sort((a, b) => a.t - b.t);
+    } else if (res.type === 'error') {
+      status('ถอดเสียงช่วงนี้ไม่สำเร็จ: ' + res.message);
+    }
+    render();
+  });
+  worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer]);
+}
+
+// ---------------------------------------------------------------- backend choice
+let backend = { device: 'wasm', dtype: 'q8' };
+async function pickBackend() {
+  const forced = new URLSearchParams(location.search).get('device');
+  if (forced === 'wasm') return { device: 'wasm', dtype: 'q8' };
+  try {
+    const adapter = navigator.gpu && await navigator.gpu.requestAdapter();
+    if (adapter && adapter.features.has('shader-f16')) return { device: 'webgpu', dtype: 'q4f16' };
+  } catch {}
+  return { device: 'wasm', dtype: 'q8' };
+}
+
+$('load').onclick = async () => {
+  $('load').disabled = true;
+  backend = await pickBackend();
+  status(backend.device === 'webgpu'
+    ? 'ใช้ GPU ของเครื่อง เริ่มโหลดโมเดล…'
+    : 'เครื่องนี้ไม่มี WebGPU จะใช้ CPU (ช้ากว่าและโหลด ~1 GB)…');
+  worker.postMessage({ type: 'load', model: MODEL, ...backend });
+};
+
+// ---------------------------------------------------------------- segmenter (streaming)
+class Segmenter {
+  constructor(onSegment) {
+    this.onSegment = onSegment;
+    this.buf = []; this.bufLen = 0; this.carry = new Float32Array(0);
+    this.total = 0; this.segStart = 0; this.quiet = 0; this.floor = null;
+  }
+  push(samples) {
+    let data = samples;
+    if (this.carry.length) { data = new Float32Array(this.carry.length + samples.length); data.set(this.carry); data.set(samples, this.carry.length); }
+    let i = 0;
+    for (; i + FRAME <= data.length; i += FRAME) this.frame(data.subarray(i, i + FRAME));
+    this.carry = data.slice(i);
+  }
+  frame(f) {
+    let e = 0; for (let k = 0; k < f.length; k++) e += f[k] * f[k];
+    const rms = Math.sqrt(e / f.length + 1e-12);
+    // Track the noise floor slowly so steady background noise is not "speech".
+    this.floor = this.floor === null ? rms : Math.min(this.floor * 1.002 + 1e-6, Math.max(this.floor * 0.98, rms));
+    this.quiet = rms < Math.max(this.floor * 2.5, 0.004) ? this.quiet + 1 : 0;
+    this.buf.push(f.slice()); this.bufLen += f.length; this.total += f.length;
+    const len = this.bufLen / SR;
+    if ((len >= MIN_SEG_S && this.quiet * FRAME / SR >= PAUSE_S) || len >= MAX_SEG_S) this.cut();
+  }
+  cut() {
+    if (!this.bufLen) return;
+    const out = new Float32Array(this.bufLen);
+    let o = 0; for (const b of this.buf) { out.set(b, o); o += b.length; }
+    const allQuiet = this.quiet * FRAME >= this.bufLen * 0.9;
+    if (!allQuiet) this.onSegment(this.segStart, out);
+    this.segStart = this.total / SR; this.buf = []; this.bufLen = 0; this.quiet = 0;
+  }
+  flush() { if (this.carry.length) { this.buf.push(this.carry); this.bufLen += this.carry.length; this.total += this.carry.length; this.carry = new Float32Array(0); } this.cut(); }
+}
+
+class Resampler {  // linear, streaming, any rate -> 16 kHz
+  constructor(inRate) { this.step = inRate / SR; this.pos = 0; this.prev = 0; }
+  push(x) {
+    const out = new Float32Array(Math.max(0, Math.ceil((x.length - this.pos) / this.step)));
+    let n = 0;
+    while (this.pos < x.length) {
+      const i = Math.floor(this.pos), frac = this.pos - i;
+      const a = i === 0 ? this.prev : x[i - 1], b = x[i];
+      out[n++] = a + (b - a) * frac;
+      this.pos += this.step;
+    }
+    this.pos -= x.length; this.prev = x[x.length - 1];
+    return out.subarray(0, n);
+  }
+}
+
+// ---------------------------------------------------------------- live recording
+let rec = null;
+const workletSrc = `
+class Tap extends AudioWorkletProcessor {
+  process(inputs) { const ch = inputs[0][0]; if (ch) this.port.postMessage(ch.slice()); return true; }
+}
+registerProcessor('tap', Tap);`;
+
+async function startRec() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true },
+  });
+  const ctx = new AudioContext();
+  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'text/javascript' })));
+  const src = ctx.createMediaStreamSource(stream);
+  const tap = new AudioWorkletNode(ctx, 'tap');
+  const resampler = new Resampler(ctx.sampleRate);
+  const offset = lines.length ? lines[lines.length - 1].t + 30 : 0;  // keep appending after earlier text
+  const seg = new Segmenter((t0, audio) => transcribe(offset + t0, audio));
+  tap.port.onmessage = e => seg.push(resampler.push(e.data));
+  src.connect(tap);
+  let lock = null;
+  try { lock = await navigator.wakeLock.request('screen'); } catch {}
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const s = (Date.now() - started) / 1000;
+    $('status').innerHTML = `<span class="dot"></span>กำลังอัด ${stamp(s).slice(1, -1)}`;
+  }, 500);
+  rec = { stream, ctx, seg, lock, timer };
+  $('rec').textContent = '■ หยุดอัด'; $('rec').className = 'rec big';
+}
+
+async function stopRec() {
+  const { stream, ctx, seg, lock, timer } = rec;
+  rec = null;
+  clearInterval(timer);
+  stream.getTracks().forEach(t => t.stop());
+  await ctx.close();
+  seg.flush();
+  try { await lock?.release(); } catch {}
+  $('rec').textContent = '● อัดต่อ'; $('rec').className = 'big';
+  status('หยุดอัดแล้ว ถ้ายังถอดเสียงไม่ครบจะทยอยขึ้นต่อ');
+}
+
+$('rec').onclick = async () => {
+  $('rec').disabled = true;
+  try { rec ? await stopRec() : await startRec(); }
+  catch (e) { status('เปิดไมค์ไม่ได้: ' + e.message + '\n(ต้องเปิดผ่าน https และอนุญาตไมค์ใน Safari)'); }
+  $('rec').disabled = false;
+};
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && rec?.lock?.released) {
+    try { rec.lock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+});
+
+// ---------------------------------------------------------------- file upload (Voice Memos .m4a etc.)
+$('file').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  status(`กำลังอ่านไฟล์ ${f.name}…`);
+  try {
+    const ctx = new AudioContext();
+    const decoded = await ctx.decodeAudioData(await f.arrayBuffer());
+    await ctx.close();
+    const ch = decoded.getChannelData(0);
+    const audio = new Resampler(decoded.sampleRate).push(ch);
+    const offset = lines.length ? lines[lines.length - 1].t + 30 : 0;
+    const seg = new Segmenter((t0, a) => transcribe(offset + t0, a));
+    seg.push(audio); seg.flush();
+    status(`${(audio.length / SR / 60).toFixed(1)} นาที กำลังถอดเสียงทีละช่วง…`);
+  } catch (err) {
+    status('อ่านไฟล์ไม่ได้: ' + err.message);
+  }
+};
+
+// ---------------------------------------------------------------- copy / clear
+async function copy(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); status(okMsg); }
+  catch { status('คัดลอกไม่ได้ ลองกดค้างที่ข้อความแล้วเลือกคัดลอกแทน'); }
+}
+$('copyT').onclick = () => copy(transcriptText(), 'คัดลอก transcript แล้ว');
+$('copyP').onclick = () => copy(
+  `${SUMMARY_PROMPT}\n\n<transcript>\n${transcriptText()}\n</transcript>`,
+  'คัดลอกแล้ว เปิด Claude app แล้ววางในแชทใหม่ได้เลย'
+);
+$('clear').onclick = () => {
+  if (!confirm('ล้าง transcript และสรุปทั้งหมด?')) return;
+  lines = []; $('summary').replaceChildren(); render(); status(ready ? 'ล้างแล้ว' : '');
+};
+
+// ---------------------------------------------------------------- summary via Claude API
+$('key').value = store.get('handoff.key') || '';
+$('key').onchange = () => store.set('handoff.key', $('key').value.trim());
+
+$('sum').onclick = async () => {
+  const apiKey = $('key').value.trim();
+  if (!apiKey) {
+    $('key').closest('details').open = true;
+    status('ใส่ API key ก่อน หรือใช้ปุ่ม "คัดลอกไปวางใน Claude app"');
+    return;
+  }
+  store.set('handoff.key', apiKey);
+  $('sum').disabled = true;
+  status('กำลังสรุป…');
+  const out = $('summary');
+  try {
+    const [{ default: Anthropic }, { marked }, { default: DOMPurify }] = await Promise.all([
+      import(ANTHROPIC_SDK), import(MARKED), import(PURIFY),
+    ]);
+    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    let text = '';
+    const stream = client.beta.messages.stream({
+      model: CLAUDE_MODEL,
+      max_tokens: 32000,
+      output_config: { effort: 'high' },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: SUMMARY_PROMPT,
+      messages: [{ role: 'user', content: `<transcript>\n${transcriptText()}\n</transcript>` }],
+    });
+    stream.on('text', delta => {
+      text += delta;
+      out.innerHTML = DOMPurify.sanitize(marked.parse(text));
+    });
+    const message = await stream.finalMessage();
+    if (message.stop_reason === 'refusal') status('Claude ไม่สรุป transcript นี้');
+    else status('สรุปเสร็จแล้ว');
+    store.set('handoff.summary', text);
+  } catch (e) {
+    const s = e?.status;
+    status(s === 401 ? 'API key ไม่ถูกต้อง' : s === 429 ? 'ใช้งานถี่เกินไป รอสักครู่แล้วลองใหม่' : 'สรุปไม่สำเร็จ: ' + (e?.message || e));
+  }
+  $('sum').disabled = false;
+};
+
+render();
+if (lines.length) status('มี transcript ค้างจากครั้งก่อน โหลดโมเดลเพื่ออัดต่อ หรือสรุปได้เลย');
+</script>
+</body>
+</html>

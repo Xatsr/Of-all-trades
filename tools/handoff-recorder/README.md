@@ -2,6 +2,40 @@
 
 อัดเสียงส่งเวรแบบ realtime (หรือใช้ไฟล์เสียงจาก iPhone) → ถอดเสียงด้วย [Typhoon Whisper Turbo](https://huggingface.co/typhoon-ai/typhoon-whisper-turbo) → ให้ Claude สรุปเป็นรายเตียง เรียงตามเลขเตียง: Dx, อาการ, V/S, lines, meds, lab ที่ต้องตาม, สิ่งที่ต้องทำในเวร (checkbox) และเรื่องที่ต้องระวัง
 
+มี 2 แบบ:
+
+- **บน iPhone (web app):** เปิดใน Safari ได้เลย ถอดเสียงบนมือถือ ไม่ต้องลงแอป ดู [ด้านล่าง](#บน-iphone)
+- **บนคอมพิวเตอร์ (`handoff.py`):** Mac / Windows / Linux
+
+## บน iPhone
+
+ไฟล์ `web/index.html` เป็นเว็บแอปไฟล์เดียว ใช้ [transformers.js](https://huggingface.co/docs/transformers.js) รัน Typhoon Whisper Turbo (ONNX q4f16 จาก [2nuttertools/typhoon-whisper-turbo](https://huggingface.co/2nuttertools/typhoon-whisper-turbo)) ผ่าน WebGPU ของ iPhone ใน Safari
+
+**เปิดใช้ครั้งแรก (เจ้าของ repo ทำครั้งเดียว):** ไปที่ GitHub → Settings → Pages → Source: *Deploy from a branch* → เลือก branch `typhoon-whisper-turbo`, folder `/ (root)` → Save รอประมาณ 1 นาที แล้วเว็บแอปจะอยู่ที่
+
+```
+https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/
+```
+
+**ใช้บน iPhone:**
+
+1. เปิดลิงก์ใน Safari → ปุ่ม Share → **Add to Home Screen** จะได้ไอคอนเหมือนแอป
+2. กด **โหลดโมเดล** ครั้งแรกจะดาวน์โหลดประมาณ 560 MB (ควรต่อ Wi-Fi) ครั้งต่อไปจะโหลดจากเครื่อง
+3. กด **เริ่มอัด** แล้วข้อความจะขึ้นทุกครั้งที่หยุดพูดสั้น ๆ พอจบให้กด **หยุดอัด**
+4. สรุปได้ 2 ทาง:
+   - **คัดลอกไปวางใน Claude app:** ใช้โควตาแพ็กเกจ Claude ที่มีอยู่ ไม่ต้องมี API key
+   - **สรุปเลย:** ใส่ API key จาก platform.claude.com แล้วสรุปบนหน้านั้นเลย (key เก็บไว้ในเครื่องนี้)
+5. หรือกด **เลือกไฟล์เสียง** เพื่อถอดเสียงไฟล์ Voice Memos (.m4a) บนมือถือ
+
+**ข้อจำกัดบน iPhone:**
+
+- **ต้องเปิดจอค้างไว้:** ถ้าล็อกจอหรือสลับแอป Safari จะหยุดไมค์ (หน้านี้กันจอดับให้แล้ว) ถ้าต้องล็อกจอ ให้อัดด้วย Voice Memos แล้วใช้ "เลือกไฟล์เสียง"
+- **รุ่นเครื่อง:** ต้องใช้ iOS 26 ขึ้นไป (Safari มี WebGPU) และแนะนำ iPhone รุ่นใหม่ที่ RAM 8 GB เช่น 15 Pro ขึ้นไป รุ่นที่ RAM น้อยอาจโหลดโมเดลไม่ไหวหรือ Safari ปิดหน้าเอง (ยังไม่ได้ทดสอบบน iPhone จริง)
+- **ถ้าไม่มี WebGPU:** จะใช้ CPU แทน ช้ากว่ามากและต้องโหลดประมาณ 1 GB
+- **transcript ไม่หาย:** เก็บไว้ในเครื่องจนกว่าจะกด "ล้าง" ถ้าหน้าเว็บปิดไปก็กลับมาสรุปต่อได้
+
+## บนคอมพิวเตอร์
+
 ต้องรันบนเครื่องของเราเอง (Mac / Windows / Linux) เพราะต้องใช้ไมค์ของเครื่อง
 
 ## ติดตั้ง (ครั้งเดียว)

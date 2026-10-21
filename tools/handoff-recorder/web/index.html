@@ -53,6 +53,10 @@
   #lines .pending { color: var(--muted); font-style: italic; }
   .empty { color: var(--muted); }
   .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: .88rem; }
+  select {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); font: inherit; min-height: 48px;
+  }
   input[type=password] {
     width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--bg); color: var(--text); font: inherit;
@@ -70,11 +74,15 @@
 <body>
 <main>
   <h1>🎙️ ส่งเวร → สรุปรายเตียง</h1>
-  <p class="sub">ถอดเสียงด้วย Typhoon Whisper Turbo บนเครื่องนี้ เสียงไม่ถูกส่งออกไปไหน</p>
+  <p class="sub">ถอดเสียงด้วยโมเดล Typhoon บนเครื่องนี้ เสียงไม่ถูกส่งออกไปไหน</p>
 
   <div class="card">
-    <div class="row">
-      <button id="load" class="primary big">โหลดโมเดล (~560 MB ครั้งแรก)</button>
+    <select id="engine" aria-label="โมเดลถอดเสียง">
+      <option value="small">Typhoon ASR Realtime: 138 MB (แนะนำสำหรับ iPhone)</option>
+      <option value="whisper">Typhoon Whisper Turbo: 560 MB (ต้องใช้ RAM เยอะ)</option>
+    </select>
+    <div class="row" style="margin-top:10px">
+      <button id="load" class="primary big">โหลดโมเดล</button>
       <button id="rec" class="big" hidden disabled>● เริ่มอัด</button>
     </div>
     <div class="row" style="margin-top:10px">
@@ -213,12 +221,17 @@ self.onmessage = async ({ data }) => {
     self.postMessage({ type: 'error', id: data.id, message: String(e && e.message || e) });
   }
 };`;
-const worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })), { type: 'module' });
+const ENGINES = {
+  small: { label: 'Typhoon ASR Realtime', size: '138 MB', worker: () => new Worker('asr-small.js', { type: 'module' }) },
+  whisper: { label: 'Typhoon Whisper Turbo', size: '560 MB',
+    worker: () => new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })), { type: 'module' }) },
+};
+let worker = null, engine = 'small';
 const waiting = new Map();
 let nextId = 0, ready = false;
 const files = {};
 
-worker.onmessage = ({ data }) => {
+function onWorkerMessage({ data }) {
   if (data.type === 'progress') {
     if (data.file && data.total) files[data.file] = [data.loaded || 0, data.total];
     const all = Object.values(files);
@@ -235,13 +248,21 @@ worker.onmessage = ({ data }) => {
     $('load').hidden = true;
     $('rec').hidden = false; $('rec').disabled = false;
     $('filelabel').hidden = false;
-    status(`พร้อมแล้ว (${backend.device === 'webgpu' ? 'GPU' : 'CPU'}) กดเริ่มอัดได้เลย`);
+    $('engine').disabled = true;
+    store.set('handoff.loading', '');
+    const where = engine === 'whisper' ? (backend.device === 'webgpu' ? ', GPU' : ', CPU') : '';
+    status(`พร้อมแล้ว (${ENGINES[engine].label}${where}) กดเริ่มอัดได้เลย`);
   } else if (data.type === 'result' || data.type === 'error') {
     const cb = waiting.get(data.id);
     if (cb) { waiting.delete(data.id); cb(data); }
-    else if (data.type === 'error') { status('โหลดโมเดลไม่สำเร็จ: ' + data.message); $('load').disabled = false; }
+    else if (data.type === 'error') {
+      store.set('handoff.loading', '');
+      status('โหลดโมเดลไม่สำเร็จ: ' + data.message);
+      $('load').disabled = false; $('engine').disabled = false;
+      worker.terminate(); worker = null;
+    }
   }
-};
+}
 
 function transcribe(t0, audio) {
   const id = nextId++;
@@ -271,13 +292,33 @@ async function pickBackend() {
   return { device: 'wasm', dtype: 'q8' };
 }
 
+engine = ENGINES[store.get('handoff.engine')] ? store.get('handoff.engine') : 'small';
+// If the page died while loading (Safari kills tabs that run out of memory), fall back to the small model.
+const crashed = store.get('handoff.loading');
+if (crashed) {
+  store.set('handoff.loading', '');
+  if (crashed === 'whisper') engine = 'small';
+}
+$('engine').value = engine;
+$('engine').onchange = () => { engine = $('engine').value; store.set('handoff.engine', engine); };
+
 $('load').onclick = async () => {
-  $('load').disabled = true;
-  backend = await pickBackend();
-  status(backend.device === 'webgpu'
-    ? 'ใช้ GPU ของเครื่อง เริ่มโหลดโมเดล…'
-    : 'เครื่องนี้ไม่มี WebGPU จะใช้ CPU (ช้ากว่าและโหลด ~1 GB)…');
-  worker.postMessage({ type: 'load', model: MODEL, ...backend });
+  $('load').disabled = true; $('engine').disabled = true;
+  for (const k in files) delete files[k];
+  store.set('handoff.engine', engine);
+  store.set('handoff.loading', engine);
+  worker = ENGINES[engine].worker();
+  worker.onmessage = onWorkerMessage;
+  if (engine === 'whisper') {
+    backend = await pickBackend();
+    status(backend.device === 'webgpu'
+      ? 'ใช้ GPU ของเครื่อง เริ่มโหลดโมเดล…'
+      : 'เครื่องนี้ไม่มี WebGPU จะใช้ CPU (ช้ากว่าและโหลด ~1 GB)…');
+    worker.postMessage({ type: 'load', model: MODEL, ...backend });
+  } else {
+    status('เริ่มโหลดโมเดล…');
+    worker.postMessage({ type: 'load' });
+  }
 };
 
 // ---------------------------------------------------------------- segmenter (streaming)
@@ -484,7 +525,10 @@ $('sum').onclick = async () => {
 };
 
 render();
-if (lines.length) status('มี transcript ค้างจากครั้งก่อน โหลดโมเดลเพื่ออัดต่อ หรือสรุปได้เลย');
+if (crashed) status(crashed === 'whisper'
+  ? 'ครั้งก่อนหน้าเว็บปิดไประหว่างโหลด Whisper (เครื่องน่าจะ RAM ไม่พอ) เปลี่ยนเป็นโมเดลเล็กให้แล้ว กดโหลดโมเดลได้เลย'
+  : 'ครั้งก่อนหน้าเว็บปิดไประหว่างโหลดโมเดล ลองกดโหลดใหม่อีกครั้ง');
+else if (lines.length) status('มี transcript ค้างจากครั้งก่อน โหลดโมเดลเพื่ออัดต่อ หรือสรุปได้เลย');
 </script>
 </body>
 </html>

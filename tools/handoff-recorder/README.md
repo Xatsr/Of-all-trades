@@ -9,7 +9,14 @@
 
 ## บน iPhone
 
-ไฟล์ `web/index.html` เป็นเว็บแอปไฟล์เดียว ใช้ [transformers.js](https://huggingface.co/docs/transformers.js) รัน Typhoon Whisper Turbo (ONNX q4f16 จาก [2nuttertools/typhoon-whisper-turbo](https://huggingface.co/2nuttertools/typhoon-whisper-turbo)) ผ่าน WebGPU ของ iPhone ใน Safari
+`web/` เป็นเว็บแอปที่ถอดเสียงบนมือถือเลย มีโมเดลให้เลือก 2 ตัว:
+
+| โมเดล | ขนาด | ใช้เมื่อ |
+| --- | --- | --- |
+| **Typhoon ASR Realtime** (ค่าเริ่มต้น) | 138 MB | iPhone ทุกรุ่นที่รองรับ เร็วมาก รันบน CPU ผ่าน [onnxruntime-web](https://onnxruntime.ai) (ไฟล์ ONNX จาก [edtzforai/typhoon-asr-int8-onnx](https://huggingface.co/edtzforai/typhoon-asr-int8-onnx) ซึ่งแปลงมาจาก [scb10x/typhoon-asr-realtime](https://huggingface.co/scb10x/typhoon-asr-realtime)) |
+| **Typhoon Whisper Turbo** | 560 MB | แม่นกว่าเล็กน้อย แต่ต้องใช้ RAM มาก บน iPhone มัก**โหลดไม่ไหว** (ขึ้นข้อความ "A problem repeatedly occurred") รันด้วย [transformers.js](https://huggingface.co/docs/transformers.js) + WebGPU |
+
+ถ้าหน้าเว็บปิดไปตอนโหลด Whisper ครั้งหน้าที่เปิด แอปจะเปลี่ยนกลับไปใช้โมเดลเล็กให้เอง
 
 **เปิดใช้ครั้งแรก (เจ้าของ repo ทำครั้งเดียว):** ไปที่ GitHub → Settings → Pages → Source: *Deploy from a branch* → เลือก branch `typhoon-whisper-turbo`, folder `/ (root)` → Save รอประมาณ 1 นาที แล้วเว็บแอปจะอยู่ที่
 
@@ -20,7 +27,7 @@ https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/
 **ใช้บน iPhone:**
 
 1. เปิดลิงก์ใน Safari → ปุ่ม Share → **Add to Home Screen** จะได้ไอคอนเหมือนแอป
-2. กด **โหลดโมเดล** ครั้งแรกจะดาวน์โหลดประมาณ 560 MB (ควรต่อ Wi-Fi) ครั้งต่อไปจะโหลดจากเครื่อง
+2. กด **โหลดโมเดล** โมเดลเล็กโหลดครั้งแรกประมาณ 138 MB ครั้งต่อไปจะโหลดจากเครื่อง
 3. กด **เริ่มอัด** แล้วข้อความจะขึ้นทุกครั้งที่หยุดพูดสั้น ๆ พอจบให้กด **หยุดอัด**
 4. สรุปได้ 2 ทาง:
    - **คัดลอกไปวางใน Claude app:** ใช้โควตาแพ็กเกจ Claude ที่มีอยู่ ไม่ต้องมี API key
@@ -31,7 +38,7 @@ https://xatsr.github.io/Of-all-trades/tools/handoff-recorder/web/
 
 - **ต้องเปิดจอค้างไว้:** ถ้าล็อกจอหรือสลับแอป Safari จะหยุดไมค์ (หน้านี้กันจอดับให้แล้ว) ถ้าต้องล็อกจอ ให้อัดด้วย Voice Memos แล้วใช้ "เลือกไฟล์เสียง"
 - **รุ่นเครื่อง:** ต้องใช้ iOS 26 ขึ้นไป (Safari มี WebGPU) และแนะนำ iPhone รุ่นใหม่ที่ RAM 8 GB เช่น 15 Pro ขึ้นไป รุ่นที่ RAM น้อยอาจโหลดโมเดลไม่ไหวหรือ Safari ปิดหน้าเอง (ยังไม่ได้ทดสอบบน iPhone จริง)
-- **ถ้าไม่มี WebGPU:** จะใช้ CPU แทน ช้ากว่ามากและต้องโหลดประมาณ 1 GB
+- **Whisper ถ้าไม่มี WebGPU:** จะใช้ CPU แทน ช้ากว่ามากและต้องโหลดประมาณ 1 GB
 - **transcript ไม่หาย:** เก็บไว้ในเครื่องจนกว่าจะกด "ล้าง" ถ้าหน้าเว็บปิดไปก็กลับมาสรุปต่อได้
 
 ## บนคอมพิวเตอร์

@@ -90,8 +90,8 @@
       <button id="clear" hidden>ล้าง</button>
     </div>
     <label class="sub" style="display:flex;gap:8px;align-items:center;margin:10px 0 0">
-      <input id="voice" type="checkbox" checked style="width:20px;height:20px">
-      ลดเสียงรบกวนรอบข้าง (ใช้ระบบเสียงสนทนาของ iPhone ถ้าเสียงเบาหรือขาด ๆ ให้ลองปิด)
+      <input id="voice" type="checkbox" style="width:20px;height:20px">
+      ลดเสียงรบกวน: เปิดเมื่อคนพูดอยู่ใกล้มือถือ ถ้าคนพูดอยู่ไกลให้ปิดไว้ เพราะ iPhone จะตัดเสียงไกลทิ้งไปด้วย
     </label>
     <progress id="prog" max="100" value="0" hidden></progress>
     <div id="status"></div>
@@ -487,7 +487,7 @@ $('clear').onclick = () => {
 };
 
 // ---------------------------------------------------------------- summary via Claude API
-$('voice').checked = store.get('handoff.voice') !== 'off';
+$('voice').checked = store.get('handoff.voice') === 'on';
 $('voice').onchange = () => store.set('handoff.voice', $('voice').checked ? 'on' : 'off');
 $('key').value = store.get('handoff.key') || '';
 $('key').onchange = () => store.set('handoff.key', $('key').value.trim());

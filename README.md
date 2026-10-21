@@ -21,6 +21,7 @@ Or copy a single skill into your personal skills folder, e.g. `cp -r plugins/xat
 | Command | `/xatsr-toolkit:review-changes [focus]` | Reviews uncommitted changes for bugs, risky edits and missing tests. |
 | Agent | `code-explainer` | Walks through how a piece of code works, citing `file:line`. Read-only. |
 | Skill | `changelog-writer` | Drafts a changelog entry from git history since the last tag. |
+| Skill | `study-page` | House style for HTML summaries and study pages: callouts for key points, mnemonics, pitfalls and pearls, tables, steps, self-check questions; light/dark mode and A4 print-to-PDF. |
 
 ## Layout
 

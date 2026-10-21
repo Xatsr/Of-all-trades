@@ -1,10 +1,16 @@
 {
   "name": "xatsr-toolkit",
-  "version": "1.0.0",
-  "description": "Everyday development helpers: a change-review command, a code explainer agent, and a changelog-writing skill.",
+  "version": "1.1.0",
+  "description": "Everyday helpers: a change-review command, a code explainer agent, a changelog-writing skill, and a study-page style for HTML summaries.",
   "author": {
     "name": "Xatsr"
   },
   "repository": "https://github.com/Xatsr/of-all-trades",
-  "keywords": ["review", "changelog", "productivity"]
+  "keywords": [
+    "review",
+    "changelog",
+    "productivity",
+    "study",
+    "html"
+  ]
 }

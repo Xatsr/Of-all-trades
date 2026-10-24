@@ -1,0 +1,213 @@
+// Shapes shared by the server and the web app: job.json, the project snapshot, live events.
+// Files written by agents (plan.json, reviews, critique…) follow CONTRACT.md; only the fields the app reads are typed here.
+
+export type AgentKind = 'claude' | 'codex';
+export type Lang = 'zh-TW' | 'en' | 'zh-CN';
+
+export type Stage =
+  | 'new' | 'analyzing' | 'styling' | 'styled' | 'planning' | 'replanning' | 'plan_review'
+  | 'producing' | 'critiquing' | 'revising' | 'needs_input' | 'done' | 'error';
+
+export const ROUND_KEYS = ['castRounds', 'chunkRounds', 'finalRounds'] as const;
+export type RoundKey = (typeof ROUND_KEYS)[number];
+export type Rounds = Record<RoundKey, number>;
+
+// Quality mode, chosen per project: how strictly reviewers check and how many fix rounds each gate gets.
+// fast: only defects a viewer sees at once block, few rounds, never pauses at a limit (delivers and lists what is left);
+// standard: per-frame checks on the climaxes; fine: per-frame checks on every pose change, the climaxes must beat the reference.
+export const QUALITIES = ['fast', 'standard', 'fine'] as const;
+export type Quality = (typeof QUALITIES)[number];
+export interface QualityPreset extends Rounds {
+  converge: number;         // extra final-review rounds while the must-fix list keeps shrinking
+  pauseAtLimit: boolean;    // at a round limit: pause and ask the user (true) or carry on and list what is left (false)
+}
+// Minutes from plan approval to the finished film, for a 30 s film (scaled by length in the UI). From real runs:
+// fine 167 and 222 min (6upkv, v8z8p); fast 79 min (hvuc0, same inputs as v8z8p); standard is an estimate until measured.
+export const QUALITY_MINUTES: Record<Quality, [number, number]> = { fast: [60, 90], standard: [100, 150], fine: [170, 230] };
+// Which of those come from real runs (the others are shown as estimates). New projects default to a measured mode.
+export const QUALITY_MEASURED: Record<Quality, boolean> = { fast: true, standard: false, fine: true };
+export const DEFAULT_QUALITY: Quality = 'fine';
+
+export interface Config extends Rounds {
+  presets: Record<Quality, QualityPreset>;
+  builders: number;
+  maxAgentsGlobal: number;
+  maxReviews: number;
+  overlapCast: boolean;
+}
+
+export interface Reference { type: 'file' | 'url'; src: string }
+
+export interface ChatMessage {
+  role: 'user' | 'agent' | 'builder' | 'critic' | 'system';
+  text: string;
+  ts: string;
+  phase?: string;
+  who?: string;
+  shot?: string;
+  time?: number;
+  attachments?: string[];
+  notes?: { t: number; text: string }[];   // timed notes on the video, sent with a message
+}
+
+// Normalised agent events (agents/index.ts) plus the server's own turn and tool markers.
+export type AgentEvent =
+  | { type: 'session'; id: string }
+  | { type: 'text'; text: string }
+  | { type: 'thinking'; text: string }
+  | { type: 'tool'; name: string; detail: string }
+  | { type: 'error'; text: string }
+  | { type: 'done'; ok: boolean; text: string; cost?: number | null };
+
+export type TurnMarker = { type: 'turn'; state: 'start' | 'end'; phase: string; ok?: boolean };
+export type LogEntry = (AgentEvent | TurnMarker) & { who?: string };
+export type LogEvent = LogEntry & { ts: string };
+
+// Something only the user can give (a file, a decision). Reviewers write these as needs_user.
+export interface NeedRequest { issue: string; kind?: string; why?: string; input?: string; [k: string]: unknown }
+export interface Need extends NeedRequest { from: string; at: string }
+
+export type ChunkState =
+  | 'queued' | 'building' | 'waiting_cast' | 'built' | 'reviewing' | 'fixing' | 'shared_fix'
+  | 'needs_user' | 'passed' | 'failed' | 'error';
+
+export interface ChunkProgress {
+  shots?: string[];
+  state: ChunkState;
+  round: number;
+  fixFirst?: boolean;
+  open?: number;
+  acceptedByUser?: boolean;
+  acceptedAtLimit?: boolean;   // fast mode: the round limit was reached and production carried on with `open` issues
+}
+
+export type CastCharState = 'queued' | 'reviewing' | 'fixing' | 'waiting_shared' | 'needs_user' | 'passed' | 'failed' | 'error';
+export interface CastCharProgress { state: CastCharState; round: number; issues?: number; acceptedAtLimit?: boolean }
+
+export interface CastProgress {
+  round: number;
+  pass: boolean;
+  state?: 'reviewing' | 'fixing' | 'passed' | 'failed';
+  mode?: 'parallel';
+  lineup?: boolean;
+  chars?: Record<string, CastCharProgress>;
+  acceptedByUser?: boolean;
+  acceptedAtLimit?: boolean;
+}
+
+export interface Pipeline {
+  phase?: 'setup' | 'cast' | 'shots' | 'assemble' | 'final';
+  cast?: CastProgress;
+  chunks?: Record<string, ChunkProgress>;
+  final?: { round: number };
+}
+
+export interface EngineSnapshot { engine: string; frozenAt: string; path: string }
+
+export interface Job {
+  id: string;
+  title: string;
+  agent: AgentKind;
+  lang: Lang;
+  reference: Reference;
+  settings: Partial<Rounds>;
+  quality?: Quality;   // missing on projects made before modes existed: they ran the 'fine' line
+  stage: Stage;
+  failed?: Stage | null;
+  error?: string | null;
+  sessionId: string | null;
+  sessions: Record<string, string>;
+  createdAt: string;
+  updatedAt?: string;
+  chat: ChatMessage[];
+  log: LogEvent[];
+  needs: Need[];
+  waived: string[];
+  provided?: Record<string, string[]>;   // required input id → files uploaded for it
+  pipeline: Pipeline;
+  pendingNotes?: string[];
+  retryPending?: boolean;
+  approvedAt?: string;
+  approvedAtPrev?: boolean;
+  approvedPlanVersion?: number | string;
+  engineSnapshot?: EngineSnapshot | null;
+  userNote?: string | null;
+  critiqueRounds?: number;
+  lastCritique?: { pass: boolean; must: number; at: string };
+}
+
+export type InputKind = 'lyrics' | 'audio' | 'image' | 'text' | 'other';
+
+export interface RequiredInputSpec {
+  id: string;
+  kind: InputKind;
+  label?: string;
+  why?: string;
+  file?: string;
+  match?: string;
+}
+
+export interface RequiredInput extends RequiredInputSpec {
+  status: 'missing' | 'provided' | 'waived';
+  files: string[];
+}
+
+export interface PlanCharacter { id: string; name?: string; file?: string; [k: string]: unknown }
+
+export interface Plan {
+  title?: string;
+  version?: number | string;
+  required_inputs?: RequiredInputSpec[];
+  music?: { file?: string; section?: { start_s?: number; end_s?: number } };
+  characters?: PlanCharacter[];
+  assets?: { status?: string; [k: string]: unknown }[];
+  [k: string]: unknown;
+}
+
+export interface Issue { issue: string; severity?: 'blocker' | 'polish' | string; fix?: string; character?: string; what?: string; [k: string]: unknown }
+
+export interface Review {
+  pass?: boolean;
+  issues?: Issue[];
+  needs_user?: NeedRequest[];
+  [k: string]: unknown;
+}
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+  stage: Stage;
+  agent: AgentKind;
+  updatedAt?: string;
+  needs: number;
+  thumb: string | null;
+}
+
+// GET /api/projects/:id: everything the project page shows, read straight from the contract files.
+export interface Snapshot {
+  job: Job;
+  brief: string | null;
+  report: Record<string, unknown> | null;
+  styleMd: string | null;
+  route: { engine?: string; [k: string]: unknown } | null;
+  plan: Plan | null;
+  storyboard: string | null;
+  assetsMd: string | null;
+  checks: string[];
+  video: string | null;
+  critique: Record<string, unknown> | null;
+  styleDistance: Record<string, unknown> | null;   // out/check/style_distance.json: measured film vs reference (compare.py)
+  cast: { sheets: string[]; review: Review | null };
+  shots: string[];
+  production: Record<string, unknown> | null;
+  lyrics: unknown;
+  requiredInputs: RequiredInput[];
+  rounds: { values: Rounds; defaults: Rounds; min: number; max: number };
+  quality: Quality;
+  inputs: string[];
+}
+
+// Server-Sent Events on /api/projects/:id/events
+export type ServerEvent = { type: 'job'; stage: Stage } | { type: 'log'; ev: LogEvent };
+
+export type AgentStatus = Record<AgentKind, string | null>;

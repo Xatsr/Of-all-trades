@@ -1,9 +1,12 @@
 // runner.ts: one flow per project, and cancel reaches every process it started (including their children).
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import * as R from './runner.ts';
 
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// a killed orphan stays a zombie (state Z) until PID 1 reaps it, and container inits often never do; count it as dead
+const zombie = (pid: number) => { try { return /^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, 'utf8')); } catch { return false; } };
+const alive = (pid: number) => { try { process.kill(pid, 0); return !zombie(pid); } catch { return false; } };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('runner', () => {

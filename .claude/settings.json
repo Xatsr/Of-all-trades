@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "skylarkitchen": {
+      "source": {
+        "source": "github",
+        "repo": "SkylarKitchen/skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "skylarkitchen-skills@skylarkitchen": true
+  }
+}

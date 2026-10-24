@@ -1,11 +1,14 @@
 ---
 name: agent-reach
 description: Reads content from the web and social platforms through the Agent Reach CLI (YouTube subtitles and transcripts, web pages and search, RSS, GitHub, Reddit, Bilibili and more). Use when the user pastes a link or asks to search, read or summarize something and the built-in web tools are unavailable, fail or miss the body, comments or subtitles; or when they want to install, update, add or remove a channel, log in, or check the status of Agent Reach. Read-only.
+metadata:
+  homepage: https://github.com/Panniantong/Agent-Reach
+  version: "1.6.0"
 ---
 
 # Agent Reach
 
-[Agent Reach](https://github.com/Panniantong/Agent-Reach) gives an agent one read-only command, `agent-reach`, that routes to the right upstream tool for each platform (yt-dlp for YouTube, Jina Reader and Exa for the web, feedparser for RSS, and so on). Before using it, say "Using the agent-reach skill (<channel> channel)".
+[Agent Reach](https://github.com/Panniantong/Agent-Reach) gives an agent one read-only command, `agent-reach`, that routes to the right upstream tool for each platform (yt-dlp for YouTube, Jina Reader and Exa for the web, feedparser for RSS, and so on). This guide matches Agent Reach **v1.6.0**. Before using it, say "Using the agent-reach skill (<channel> channel)".
 
 ## Pick the route
 
@@ -83,15 +86,16 @@ When a result carries `meta.update`, mention the new version once per conversati
 
 The PyPI package named `agent-reach` is a different project. Install only from the GitHub release.
 
-1. Check `agent-reach version`. JSON output means 1.6 or later (run `agent-reach update`); a plain line like `Agent Reach v1.5.0` means an old pip/pipx install that should be upgraded with step 3 using `--force`.
+1. Check `agent-reach version`. JSON output means 1.6 or later (run `agent-reach update`). A plain line like `Agent Reach v1.5.0` means an old pip/pipx install: tell the user "This is a big upgrade. Your keys and settings are kept; I'm moving Agent Reach to the new installer", then do step 3 with `uv tool install --force ...`. `setup` removes the old 1.5 program (nothing else) and keeps `~/.agent-reach/config.yaml`.
 2. Install [uv](https://docs.astral.sh/uv/) if missing:
    - Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
    - macOS / Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 3. Install and set up:
    ```bash
-   uv tool install https://github.com/Panniantong/Agent-Reach/releases/latest/download/agent-reach.zip
+   uv tool install https://github.com/Panniantong/Agent-Reach/releases/download/v1.6.0/agent-reach.zip
    agent-reach setup
    ```
+   This pins v1.6.0; swap `download/v1.6.0` for `latest/download` to take whatever is newest.
    If `agent-reach` is not found afterwards, run `uv tool update-shell` and open a new shell.
 4. Show `result.installation_report.markdown` from the setup output to the user as is.
 

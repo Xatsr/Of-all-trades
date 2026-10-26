@@ -23,6 +23,7 @@ Or copy a single skill into your personal skills folder, e.g. `cp -r plugins/xat
 | Skill | `changelog-writer` | Drafts a changelog entry from git history since the last tag. |
 | Skill | `study-page` | House style for HTML summaries and study pages: callouts for key points, mnemonics, pitfalls and pearls, tables, steps, self-check questions; light/dark mode and A4 print-to-PDF. |
 | Skill | `review` | Exam-depth Thai review of a medical topic (CPG/NLEM, mnemonics, pitfalls), built on the `study-page` template. |
+| Skill | `dithercn` | Builds dithered visuals (backgrounds, charts, text, images) with the [dithercn](https://github.com/opencoredev/dithercn) engine in React + shadcn/ui + Tailwind v4 apps; installs the engine via the shadcn CLI. MIT, © Leo. |
 
 ## Layout
 

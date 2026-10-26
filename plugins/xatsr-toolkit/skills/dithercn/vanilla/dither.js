@@ -6,7 +6,7 @@
  *
  * Based on dithercn (https://github.com/opencoredev/dithercn), MIT, (c) Leo.
  *
- * Use it two ways:
+ * Use it three ways:
  *
  *   1. Markup only. Give an element `data-dither` with a preset name, or the
  *      id of a <script type="x-shader/x-field"> that holds a GLSL `field`:
@@ -14,13 +14,20 @@
  *        <div class="hero" data-dither="clouds"></div>
  *        <div class="hero" data-dither="#my-field" data-cell="4"></div>
  *
- *   2. JavaScript:
+ *   2. JavaScript, live:
  *
  *        const stop = Dither.mount(element, { field: "...", cell: 3 });
  *
+ *   3. JavaScript, one still frame as a PNG data URL (no live canvas, so it
+ *      doesn't count toward the browser's limit of ~16 WebGL contexts):
+ *
+ *        const url = Dither.render({ field: "rings", width: 320, height: 200 });
+ *        element.style.background = `url(${url}) center / cover`;
+ *        element.style.imageRendering = "pixelated";
+ *
  * Options (attribute form in brackets):
  *   field      GLSL source defining `float field(vec2 uv, vec2 res, float t)`,
- *              or a preset name: gradient, clouds, waves, rings, glow, aurora
+ *              or a preset name (see Dither.presets)
  *   cell       pixel size of one dither cell            [data-cell]     3
  *   levels     tone steps the field is quantised to     [data-levels]   17
  *   matrix     "bayer2" | "bayer4" | "bayer8"           [data-matrix]   bayer8
@@ -28,6 +35,10 @@
  *   stillTime  time shown when motion is reduced        [data-still]    4
  *   ink        CSS colour of the dots                   [data-ink]      var(--dither-ink)
  *   paper      CSS colour of the ground, or transparent [data-paper]    transparent
+ *
+ * Presets: gradient, clouds, waves, rings, glow, aurora, plasma, contours,
+ * spiral, ripple, grid, sunset, ridges, orb, tunnel, fire, rain, stars,
+ * beams, stripes, static, vignette, dunes, checker.
  *
  * The canvas fills the element (position: absolute; inset: 0), so give the
  * element a size and keep content in a sibling or child above it.
@@ -75,51 +86,182 @@
     "}",
   ].join("\n");
 
+  var fieldOf = function (body) {
+    return ["float field(vec2 uv, vec2 res, float t) {"].concat(body, ["}"]).join("\n");
+  };
+
   // Each preset returns a tone in [0, 1]: 0 paper, 1 ink.
   var PRESETS = {
-    gradient: [
-      "float field(vec2 uv, vec2 res, float t) {",
+    gradient: fieldOf([
       "  return smoothstep(0.0, 1.0, 1.0 - uv.y);",
-      "}",
-    ].join("\n"),
-    clouds: [
-      "float field(vec2 uv, vec2 res, float t) {",
+    ]),
+    clouds: fieldOf([
       "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
       "  return fbm(p * 2.5 + vec2(t * 0.03, 0.0)) * smoothstep(0.0, 0.7, 1.0 - uv.y);",
-      "}",
-    ].join("\n"),
-    waves: [
-      "float field(vec2 uv, vec2 res, float t) {",
+    ]),
+    waves: fieldOf([
       "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
       "  float w = sin(p.x * 6.0 + t * 0.4 + sin(p.y * 4.0 - t * 0.3) * 1.5);",
-      "  return (0.5 + 0.5 * w) * smoothstep(1.0, 0.0, uv.y) * 0.9;",
-      "}",
-    ].join("\n"),
-    rings: [
-      "float field(vec2 uv, vec2 res, float t) {",
+      "  return (0.5 + 0.5 * w) * (1.0 - uv.y) * 0.9;",
+    ]),
+    rings: fieldOf([
       "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
       "  float d = length(p);",
       "  float r = 0.5 + 0.5 * sin(d * 40.0 - t * 1.2);",
       "  return r * exp(-d * 2.5);",
-      "}",
-    ].join("\n"),
-    glow: [
-      "float field(vec2 uv, vec2 res, float t) {",
+    ]),
+    glow: fieldOf([
       "  vec2 p = (uv - vec2(0.5, 0.15)) * vec2(res.x / res.y, 1.0);",
       "  float pulse = 1.0 + 0.05 * sin(t * 0.6);",
       "  return exp(-dot(p, p) * 6.0 / pulse);",
-      "}",
-    ].join("\n"),
-    aurora: [
-      "float field(vec2 uv, vec2 res, float t) {",
+    ]),
+    aurora: fieldOf([
       "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
       "  float sway = fbm(vec2(p.x * 1.2 + t * 0.02, t * 0.03)) - 0.5;",
       "  float y = uv.y - 0.6 - sway * 0.5;",
       "  float band = exp(-y * y * 30.0);",
       "  float rays = 0.6 + 0.4 * fbm(vec2(p.x * 8.0, t * 0.05));",
       "  return band * rays * smoothstep(0.0, 0.4, uv.y);",
-      "}",
-    ].join("\n"),
+    ]),
+    plasma: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y) * 3.0;",
+      "  float v = sin(p.x + t * 0.5) + sin(p.y * 1.3 - t * 0.4)",
+      "    + sin((p.x + p.y) * 0.8 + t * 0.3) + sin(length(p - 1.5) * 2.0 - t * 0.6);",
+      "  return 0.5 + 0.125 * v;",
+    ]),
+    contours: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  float h = fbm(p * 1.8 + vec2(t * 0.02, t * 0.01));",
+      "  float line = smoothstep(0.38, 0.5, abs(fract(h * 10.0) - 0.5));",
+      "  return max(line, h * 0.2);",
+    ]),
+    spiral: fieldOf([
+      "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
+      "  float r = length(p);",
+      "  float a = atan(p.y, p.x);",
+      "  float s = sin(a * 3.0 + log(r + 0.001) * 8.0 - t * 1.0);",
+      "  return (0.5 + 0.5 * s) * (1.0 - smoothstep(0.05, 0.75, r));",
+    ]),
+    ripple: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  vec2 a = vec2(0.35 * res.x / res.y, 0.55);",
+      "  vec2 b = vec2(0.7 * res.x / res.y, 0.4);",
+      "  float w = sin(length(p - a) * 30.0 - t * 2.0) + sin(length(p - b) * 26.0 - t * 1.7);",
+      "  return 0.5 + 0.25 * w;",
+    ]),
+    grid: fieldOf([
+      "  // a retro perspective floor scrolling toward you",
+      "  float y = 0.5 - uv.y;",
+      "  float depth = 0.12 / max(y, 0.002);",
+      "  float x = (uv.x - 0.5) * res.x / res.y * depth;",
+      "  float z = depth + t * 0.6;",
+      "  float gx = smoothstep(0.42, 0.5, abs(fract(x * 1.5) - 0.5));",
+      "  float gz = smoothstep(0.40, 0.5, abs(fract(z) - 0.5));",
+      "  float ground = max(gx, gz) * smoothstep(0.0, 0.2, y);",
+      "  float sky = exp(-max(-y, 0.0) * 12.0) * 0.35;",
+      "  return y > 0.0 ? ground : sky;",
+    ]),
+    sunset: fieldOf([
+      "  vec2 p = (uv - vec2(0.5, 0.42)) * vec2(res.x / res.y, 1.0);",
+      "  float d = length(p);",
+      "  float sun = 1.0 - smoothstep(0.29, 0.3, d);",
+      "  float slots = smoothstep(-0.2, 0.2, sin(uv.y * 70.0 + t * 1.5));",
+      "  float cut = mix(1.0, slots, 1.0 - smoothstep(0.3, 0.45, uv.y));",
+      "  float glow = exp(-d * 4.0) * 0.35;",
+      "  return max(sun * cut * (0.55 + 0.45 * uv.y), glow);",
+    ]),
+    ridges: fieldOf([
+      "  // layered mountain ridgelines, far to near",
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  float tone = 0.0;",
+      "  for (int i = 0; i < 5; i++) {",
+      "    float fi = float(i);",
+      "    float base = 0.78 - fi * 0.14;",
+      "    float n = fbm(vec2(p.x * 1.4 + fi * 7.3 + t * 0.01 * (fi + 1.0), fi * 3.1));",
+      "    float h = base + (n - 0.5) * 0.4;",
+      "    tone = uv.y < h ? 0.12 + fi * 0.2 : tone;",
+      "  }",
+      "  return tone;",
+    ]),
+    orb: fieldOf([
+      "  // a lit sphere; the light circles slowly",
+      "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0) / 0.38;",
+      "  float r2 = dot(p, p);",
+      "  vec3 n = vec3(p, sqrt(max(1.0 - r2, 0.0)));",
+      "  vec3 l = normalize(vec3(-0.5 + 0.4 * sin(t * 0.4), 0.55, 0.7));",
+      "  float lit = clamp(dot(n, l), 0.0, 1.0);",
+      "  return (1.0 - step(1.0, r2)) * (0.08 + 0.92 * lit);",
+    ]),
+    tunnel: fieldOf([
+      "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
+      "  float r = length(p);",
+      "  float a = atan(p.y, p.x) / 6.2831853;",
+      "  float z = 0.25 / max(r, 0.001) + t * 0.5;",
+      "  float tiles = 0.5 + 0.5 * sin(z * 6.2831853) * sin((a + t * 0.03) * 6.2831853 * 8.0);",
+      "  return tiles * smoothstep(0.02, 0.45, r);",
+    ]),
+    fire: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  float n = fbm(vec2(p.x * 3.0, p.y * 2.0 - t * 0.8));",
+      "  float heat = (1.0 - uv.y) * 1.3 - 0.35 + (n - 0.5) * 0.9;",
+      "  return clamp(heat, 0.0, 1.0);",
+    ]),
+    rain: fieldOf([
+      "  // streaks falling at different speeds, head at the bottom",
+      "  float col = floor(uv.x * res.x / 3.0);",
+      "  float speed = 0.25 + hash21(vec2(col, 1.0)) * 0.35;",
+      "  float y = fract(uv.y + t * speed + hash21(vec2(col, 7.0)));",
+      "  float streak = 1.0 - smoothstep(0.0, 0.25, y);",
+      "  return streak * step(0.55, hash21(vec2(col, 3.0)));",
+    ]),
+    stars: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y) * 36.0;",
+      "  vec2 cell = floor(p);",
+      "  float h = hash21(cell);",
+      "  vec2 o = vec2(hash21(cell + 3.1), hash21(cell + 7.7)) - 0.5;",
+      "  float d = length(fract(p) - 0.5 - o * 0.6);",
+      "  float star = step(0.86, h) * (1.0 - smoothstep(0.0, 0.14, d));",
+      "  float twinkle = 0.55 + 0.45 * sin(t * 2.0 + h * 60.0);",
+      "  float haze = fbm(p * 0.04 + vec2(t * 0.01, 0.0)) * 0.18;",
+      "  return max(star * twinkle, haze);",
+    ]),
+    beams: fieldOf([
+      "  // god rays from above the top edge",
+      "  vec2 p = (uv - vec2(0.5, 1.15)) * vec2(res.x / res.y, 1.0);",
+      "  float a = atan(p.x, -p.y);",
+      "  float rays = fbm(vec2(a * 4.0, t * 0.08));",
+      "  return smoothstep(0.35, 0.8, rays) * exp(-length(p) * 1.3) * 1.3;",
+    ]),
+    stripes: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  float s = sin((p.x + p.y) * 25.0 - t * 1.5);",
+      "  return (0.5 + 0.5 * s) * (0.25 + 0.75 * uv.x);",
+    ]),
+    static: fieldOf([
+      "  // TV static, with a soft vignette",
+      "  float n = hash21(floor(uv * res) + floor(t * 12.0) * 17.0);",
+      "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
+      "  return n * (1.0 - smoothstep(0.2, 0.9, length(p))) * 0.9;",
+    ]),
+    dunes: fieldOf([
+      "  vec2 p = vec2(uv.x * res.x / res.y, uv.y);",
+      "  float warp = fbm(p * 1.2 + vec2(t * 0.02, 0.0));",
+      "  float s = sin((p.y + warp * 0.6) * 28.0 + p.x * 2.0);",
+      "  return (0.5 + 0.5 * s) * (0.35 + 0.65 * (1.0 - uv.y));",
+    ]),
+    checker: fieldOf([
+      "  // a slowly turning checkerboard that fades at the edges",
+      "  vec2 q = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
+      "  float a = t * 0.1;",
+      "  vec2 p = mat2(cos(a), -sin(a), sin(a), cos(a)) * q * 8.0;",
+      "  float c = sin(p.x * 3.14159) * sin(p.y * 3.14159);",
+      "  return smoothstep(-0.2, 0.2, c) * (1.0 - smoothstep(0.2, 0.75, length(q)));",
+    ]),
+    vignette: fieldOf([
+      "  vec2 p = (uv - 0.5) * vec2(res.x / res.y, 1.0);",
+      "  float edge = smoothstep(0.25, 0.85, length(p));",
+      "  return edge * (0.85 + 0.15 * fbm(p * 3.0 + t * 0.05));",
+    ]),
   };
 
   var VERTEX = [
@@ -212,47 +354,39 @@
     return shader;
   };
 
-  var reducedMotion = global.matchMedia
-    ? global.matchMedia("(prefers-reduced-motion: reduce)")
-    : { matches: false };
-
-  var mount = function (element, options) {
+  var normalize = function (options) {
     options = options || {};
     var field = options.field || "clouds";
-    field = PRESETS[field] || field;
-    var cell = Math.max(1, Number(options.cell) || 3);
-    var levels = Math.max(2, Number(options.levels) || 17);
-    var matrixSize = MATRIX_SIZES[options.matrix] || 8;
-    var speed = options.speed === undefined ? 1 : Number(options.speed);
-    var stillTime = options.stillTime === undefined ? 4 : Number(options.stillTime);
-    var inkValue = options.ink || "var(--dither-ink, currentColor)";
-    var paperValue = options.paper || "transparent";
+    return {
+      field: PRESETS[field] || field,
+      cell: Math.max(1, Number(options.cell) || 3),
+      levels: Math.max(2, Number(options.levels) || 17),
+      matrixSize: MATRIX_SIZES[options.matrix] || 8,
+      speed: options.speed === undefined ? 1 : Number(options.speed),
+      stillTime: options.stillTime === undefined ? 4 : Number(options.stillTime),
+      ink: options.ink || "var(--dither-ink, currentColor)",
+      paper: options.paper || "transparent",
+    };
+  };
 
-    if (getComputedStyle(element).position === "static") {
-      element.style.position = "relative";
-    }
-    var canvas = document.createElement("canvas");
-    canvas.setAttribute("aria-hidden", "true");
-    canvas.style.cssText =
-      "position:absolute;inset:0;width:100%;height:100%;display:block;" +
-      "image-rendering:pixelated;pointer-events:none;z-index:0;";
-    element.prepend(canvas);
-
-    var gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
-    if (!gl) {
-      canvas.remove();
-      return function () {};
-    }
+  // Compiles a field into a ready-to-draw program on `gl`. Returns null when
+  // the field doesn't compile (the reason is logged).
+  var createRenderer = function (gl, opts) {
     var vertex = compile(gl, gl.VERTEX_SHADER, VERTEX);
-    var fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource(field));
+    var fragment = compile(gl, gl.FRAGMENT_SHADER, fragmentSource(opts.field));
     if (!vertex || !fragment) {
-      canvas.remove();
-      return function () {};
+      return null;
     }
     var program = gl.createProgram();
     gl.attachShader(program, vertex);
     gl.attachShader(program, fragment);
     gl.linkProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      gl.deleteProgram(program);
+      return null;
+    }
     gl.useProgram(program);
 
     var buffer = gl.createBuffer();
@@ -269,19 +403,69 @@
     var uTime = u("u_time");
     var uInk = u("u_ink");
     var uPaper = u("u_paper");
-    gl.uniform1f(u("u_levels"), levels);
-    gl.uniform1f(u("u_matrixSize"), matrixSize);
+    gl.uniform1f(u("u_levels"), opts.levels);
+    gl.uniform1f(u("u_matrixSize"), opts.matrixSize);
     gl.uniform1i(u("u_thresholds"), 0);
 
     var texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, matrixSize, matrixSize, 0,
-      gl.LUMINANCE, gl.UNSIGNED_BYTE, bayer(matrixSize));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, opts.matrixSize, opts.matrixSize, 0,
+      gl.LUMINANCE, gl.UNSIGNED_BYTE, bayer(opts.matrixSize));
+
+    return {
+      setColors: function (ink, paper) {
+        gl.uniform4f(uInk, ink[0], ink[1], ink[2], ink[3]);
+        gl.uniform4f(uPaper, paper[0], paper[1], paper[2], paper[3]);
+      },
+      draw: function (columns, rows, time) {
+        gl.viewport(0, 0, columns, rows);
+        gl.uniform2f(uResolution, columns, rows);
+        gl.uniform1f(uTime, time);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      },
+      dispose: function () {
+        gl.deleteTexture(texture);
+        gl.deleteBuffer(buffer);
+        gl.deleteProgram(program);
+      },
+    };
+  };
+
+  var reducedMotion = global.matchMedia
+    ? global.matchMedia("(prefers-reduced-motion: reduce)")
+    : { matches: false };
+
+  var mount = function (element, options) {
+    var opts = normalize(options);
+
+    if (getComputedStyle(element).position === "static") {
+      element.style.position = "relative";
+    }
+    var canvas = document.createElement("canvas");
+    canvas.setAttribute("aria-hidden", "true");
+    canvas.style.cssText =
+      "position:absolute;inset:0;width:100%;height:100%;display:block;" +
+      "image-rendering:pixelated;pointer-events:none;z-index:0;";
+    element.prepend(canvas);
+
+    var gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
+    var renderer = gl && createRenderer(gl, opts);
+    if (!renderer) {
+      var lost = gl && gl.getExtension("WEBGL_lose_context");
+      if (lost) {
+        lost.loseContext();
+      }
+      canvas.remove();
+      return function () {};
+    }
 
     var columns = 0;
     var rows = 0;
@@ -290,30 +474,19 @@
     var start = performance.now();
 
     var applyColors = function () {
-      var ink = resolveColor(element, inkValue);
-      var paper = resolveColor(element, paperValue);
-      gl.uniform4f(uInk, ink[0], ink[1], ink[2], ink[3]);
-      gl.uniform4f(uPaper, paper[0], paper[1], paper[2], paper[3]);
+      renderer.setColors(resolveColor(element, opts.ink), resolveColor(element, opts.paper));
     };
 
     var animated = function () {
-      return speed !== 0 && !reducedMotion.matches;
-    };
-
-    var draw = function (now) {
-      if (!columns || !rows) {
-        return;
-      }
-      var time = animated() ? ((now - start) / 1000) * speed : stillTime;
-      gl.viewport(0, 0, columns, rows);
-      gl.uniform2f(uResolution, columns, rows);
-      gl.uniform1f(uTime, time);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      return opts.speed !== 0 && !reducedMotion.matches;
     };
 
     var tick = function (now) {
       frame = 0;
-      draw(now);
+      if (columns && rows) {
+        var time = animated() ? ((now - start) / 1000) * opts.speed : opts.stillTime;
+        renderer.draw(columns, rows, time);
+      }
       if (visible && animated()) {
         frame = requestAnimationFrame(tick);
       }
@@ -327,8 +500,8 @@
 
     var resize = function () {
       var rect = element.getBoundingClientRect();
-      columns = Math.max(1, Math.round(rect.width / cell));
-      rows = Math.max(1, Math.round(rect.height / cell));
+      columns = Math.max(1, Math.round(rect.width / opts.cell));
+      rows = Math.max(1, Math.round(rect.height / opts.cell));
       canvas.width = columns;
       canvas.height = rows;
       schedule();
@@ -351,7 +524,9 @@
     };
     var darkQuery = global.matchMedia("(prefers-color-scheme: dark)");
     darkQuery.addEventListener("change", onTheme);
-    reducedMotion.addEventListener && reducedMotion.addEventListener("change", schedule);
+    if (reducedMotion.addEventListener) {
+      reducedMotion.addEventListener("change", schedule);
+    }
     var themeObserver = new MutationObserver(onTheme);
     [document.documentElement, document.body].forEach(function (node) {
       themeObserver.observe(node, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
@@ -366,12 +541,51 @@
       intersectionObserver.disconnect();
       themeObserver.disconnect();
       darkQuery.removeEventListener("change", onTheme);
-      reducedMotion.removeEventListener && reducedMotion.removeEventListener("change", schedule);
-      gl.deleteTexture(texture);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
+      if (reducedMotion.removeEventListener) {
+        reducedMotion.removeEventListener("change", schedule);
+      }
+      renderer.dispose();
+      // Free the context now instead of waiting for garbage collection, so
+      // remounting doesn't run into the browser's limit on live contexts.
+      var lose = gl.getExtension("WEBGL_lose_context");
+      if (lose) {
+        lose.loseContext();
+      }
       canvas.remove();
     };
+  };
+
+  // One shared offscreen context for still frames.
+  var shared = null;
+  var render = function (options) {
+    options = options || {};
+    var opts = normalize(options);
+    var width = Number(options.width) || 320;
+    var height = Number(options.height) || 200;
+    var columns = Math.max(1, Math.round(width / opts.cell));
+    var rows = Math.max(1, Math.round(height / opts.cell));
+    if (!shared) {
+      var canvas = document.createElement("canvas");
+      shared = {
+        canvas: canvas,
+        gl: canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true }),
+      };
+    }
+    if (!shared.gl) {
+      return null;
+    }
+    shared.canvas.width = columns;
+    shared.canvas.height = rows;
+    var renderer = createRenderer(shared.gl, opts);
+    if (!renderer) {
+      return null;
+    }
+    var scope = options.element || document.body;
+    renderer.setColors(resolveColor(scope, opts.ink), resolveColor(scope, opts.paper));
+    renderer.draw(columns, rows, options.time === undefined ? opts.stillTime : Number(options.time));
+    var url = shared.canvas.toDataURL("image/png");
+    renderer.dispose();
+    return url;
   };
 
   var mountAll = function (root) {
@@ -399,7 +613,7 @@
     });
   };
 
-  global.Dither = { mount: mount, mountAll: mountAll, presets: PRESETS };
+  global.Dither = { mount: mount, mountAll: mountAll, render: render, presets: PRESETS };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {

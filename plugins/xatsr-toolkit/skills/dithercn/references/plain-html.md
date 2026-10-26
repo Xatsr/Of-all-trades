@@ -21,11 +21,21 @@ The script prepends an `absolute inset-0` canvas to each `[data-dither]` element
 .hero > :not(canvas) { position: relative; z-index: 1; }
 ```
 
+## Presets
+
+24 built in, all in `Dither.presets`:
+
+| Group | Presets |
+| --- | --- |
+| Soft backgrounds | `clouds`, `aurora`, `glow`, `gradient`, `vignette`, `beams`, `fire`, `stars` |
+| Patterns | `waves`, `rings`, `ripple`, `plasma`, `stripes`, `checker`, `spiral`, `static` |
+| Scenes | `sunset`, `grid`, `ridges`, `dunes`, `contours`, `orb`, `tunnel`, `rain` |
+
 ## Attributes
 
 | Attribute | Default | Meaning |
 | --- | --- | --- |
-| `data-dither` | `clouds` | A preset (`gradient`, `clouds`, `waves`, `rings`, `glow`, `aurora`) or `#id` of a `<script type="x-shader/x-field">` holding a `field` |
+| `data-dither` | `clouds` | A preset name or `#id` of a `<script type="x-shader/x-field">` holding a `field` |
 | `data-cell` | `3` | Cell size in CSS px. 2–3 texture, 4–6 pixel look, 8+ pixel art |
 | `data-levels` | `17` | Tone steps |
 | `data-matrix` | `bayer8` | `bayer2`, `bayer4` or `bayer8` |
@@ -58,4 +68,12 @@ Write fields as in [fields.md](fields.md); every rule in SKILL.md still applies.
 const stop = Dither.mount(element, { field: "aurora", cell: 4, ink: "var(--brand)" });
 stop(); // removes the canvas and observers
 Dither.mountAll(container); // mounts [data-dither] added after load
+
+// One still frame as a PNG data URL, from a shared context. Use it for
+// thumbnails, CSS backgrounds or <img>, and when a page needs more than
+// ~16 dithers (browsers cap live WebGL contexts).
+const url = Dither.render({ field: "sunset", width: 640, height: 360, cell: 3 });
+box.style.backgroundImage = `url(${url})`;
+box.style.backgroundSize = "cover";
+box.style.imageRendering = "pixelated";
 ```

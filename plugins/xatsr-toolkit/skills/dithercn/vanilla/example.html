@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dither Demo</title>
+  <style>
+    :root {
+      --bg: #fafaf9;
+      --fg: #1c1917;
+      --muted: #57534e;
+      --dither-ink: #1c1917;
+      --dither-blue: oklch(0.56 0.18 248);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0c0a09;
+        --fg: #fafaf9;
+        --muted: #a8a29e;
+        --dither-ink: #e7e5e4;
+        --dither-blue: oklch(0.72 0.14 240);
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0c0a09;
+      --fg: #fafaf9;
+      --muted: #a8a29e;
+      --dither-ink: #e7e5e4;
+      --dither-blue: oklch(0.72 0.14 240);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.5 system-ui, sans-serif;
+    }
+    .hero {
+      min-height: 70vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 16px;
+    }
+    /* Content sits above the canvas the script adds as the first child. */
+    .hero > :not(canvas) { position: relative; z-index: 1; }
+    .hero h1 { font-size: clamp(2rem, 7vw, 4.5rem); margin: 0; }
+    .hero p { color: var(--muted); margin: 0.5rem 0 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      padding: 16px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .card {
+      height: 200px;
+      border: 1px solid color-mix(in oklab, var(--fg) 15%, transparent);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      padding: 12px;
+    }
+    .card span {
+      position: relative;
+      z-index: 1;
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- A preset fades out behind the headline so the text stays readable. -->
+  <section class="hero" data-dither="#hero-field" data-cell="3">
+    <div>
+      <h1>Dithered, no build step</h1>
+      <p>One script tag, one attribute.</p>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div class="card" data-dither="clouds"><span>clouds</span></div>
+    <div class="card" data-dither="aurora" data-ink="var(--dither-blue)"><span>aurora</span></div>
+    <div class="card" data-dither="waves" data-cell="4"><span>waves</span></div>
+    <div class="card" data-dither="rings" data-matrix="bayer4"><span>rings</span></div>
+    <div class="card" data-dither="glow"><span>glow</span></div>
+    <div class="card" data-dither="gradient" data-cell="6" data-speed="0"><span>gradient</span></div>
+  </div>
+
+  <!-- A custom field: tone 0 is paper, 1 is ink. -->
+  <script type="x-shader/x-field" id="hero-field">
+    float field(vec2 uv, vec2 res, float t) {
+      vec2 p = vec2(uv.x * res.x / res.y, uv.y);
+      float clouds = fbm(p * 2.0 + vec2(t * 0.03, 0.0));
+      // Clear ground in the middle, where the headline sits.
+      vec2 c = (uv - 0.5) * vec2(res.x / res.y, 1.0);
+      float clear = smoothstep(0.15, 0.55, length(c * vec2(0.6, 1.4)));
+      return clouds * clear * 0.75;
+    }
+  </script>
+  <script src="dither.js"></script>
+</body>
+</html>

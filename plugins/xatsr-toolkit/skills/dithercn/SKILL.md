@@ -9,6 +9,8 @@ dithercn is a dither engine. `dither-core` (installed into `lib/dither`) turns a
 
 ## 1. Set up the engine
 
+For a plain HTML page with no React, skip this section and read [plain-html.md](references/plain-html.md).
+
 Find the engine: `lib/dither/index.ts`, under the `lib` alias in `components.json` (imports below use `@/lib/dither`; use the project's alias). If it is missing, install it from the dithercn registry:
 
 ```bash
@@ -37,6 +39,7 @@ Done when `lib/dither/index.ts` exists, `lib/dither/shader.tsx` mentions `colorF
 | Many hues at once: a rainbow, a spectrum, RGB, a different colour per line or shape                                                   | `DitherShader` with a `field` for the shape and a `colorField` for the colour | [fields.md](references/fields.md#colour)               |
 | A photo or logo, dithered                                                                                                             | `ditherImage` on canvas pixels                                                | [engine-api.md](references/engine-api.md#images)       |
 | A PNG, SVG or CSS file, or a background with no JavaScript                                                                            | `dither-export`                                                               | [engine-api.md](references/engine-api.md#export)       |
+| Any of the above on a plain HTML page or single-file artifact, with no React                                                         | `vanilla/dither.js`: `data-dither` attribute or `Dither.mount`                | [plain-html.md](references/plain-html.md)              |
 
 Combine them freely: a dashboard card can hold an SVG meter with `FillPattern` over a `DitherShader` glow.
 

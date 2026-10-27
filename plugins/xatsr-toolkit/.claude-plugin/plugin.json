@@ -1,7 +1,7 @@
 {
   "name": "xatsr-toolkit",
-  "version": "1.2.0",
-  "description": "Everyday helpers: a change-review command, a code explainer agent, a changelog-writing skill, a study-page style for HTML summaries, and a dithercn skill for dithered visuals in React/shadcn apps.",
+  "version": "1.3.0",
+  "description": "Everyday helpers: a change-review command, a code explainer agent, a changelog-writing skill, a study-page style for HTML summaries, and dither effects for React/shadcn apps (dithercn) and plain HTML pages (dither-html).",
   "author": {
     "name": "Xatsr"
   },

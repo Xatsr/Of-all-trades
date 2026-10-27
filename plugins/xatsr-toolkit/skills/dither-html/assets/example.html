@@ -10,23 +10,14 @@
       --fg: #1c1917;
       --muted: #57534e;
       --dither-ink: #1c1917;
-      --dither-blue: oklch(0.56 0.18 248);
     }
     @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
+      :root {
         --bg: #0c0a09;
         --fg: #fafaf9;
         --muted: #a8a29e;
         --dither-ink: #e7e5e4;
-        --dither-blue: oklch(0.72 0.14 240);
       }
-    }
-    :root[data-theme="dark"] {
-      --bg: #0c0a09;
-      --fg: #fafaf9;
-      --muted: #a8a29e;
-      --dither-ink: #e7e5e4;
-      --dither-blue: oklch(0.72 0.14 240);
     }
     * { box-sizing: border-box; }
     body {
@@ -74,7 +65,7 @@
   </style>
 </head>
 <body>
-  <!-- A preset fades out behind the headline so the text stays readable. -->
+  <!-- A custom field that borrows nothing: clear ground behind the headline. -->
   <section class="hero" data-dither="#hero-field" data-cell="3">
     <div>
       <h1>Dithered, no build step</h1>
@@ -83,15 +74,14 @@
   </section>
 
   <div class="grid">
-    <div class="card" data-dither="clouds"><span>clouds</span></div>
-    <div class="card" data-dither="aurora" data-ink="var(--dither-blue)"><span>aurora</span></div>
-    <div class="card" data-dither="waves" data-cell="4"><span>waves</span></div>
-    <div class="card" data-dither="rings" data-matrix="bayer4"><span>rings</span></div>
-    <div class="card" data-dither="glow"><span>glow</span></div>
-    <div class="card" data-dither="gradient" data-cell="6" data-speed="0"><span>gradient</span></div>
+    <div class="card" data-dither="aurora"><span>aurora</span></div>
+    <div class="card" data-dither="plasma"><span>plasma</span></div>
+    <div class="card" data-dither="silk"><span>silk</span></div>
+    <div class="card" data-dither="retro-grid"><span>retro-grid</span></div>
+    <div class="card" data-dither="beams" data-ink="oklch(0.6 0.18 250)"><span>beams, recoloured</span></div>
+    <div class="card" data-dither="metaballs" data-uniforms='{"metaballsMode": 1}'><span>metaballs, rings</span></div>
   </div>
 
-  <!-- A custom field: tone 0 is paper, 1 is ink. -->
   <script type="x-shader/x-field" id="hero-field">
     float field(vec2 uv, vec2 res, float t) {
       vec2 p = vec2(uv.x * res.x / res.y, uv.y);
